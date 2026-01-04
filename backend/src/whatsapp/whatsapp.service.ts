@@ -53,26 +53,39 @@ export class WhatsAppService {
    */
   async sendInvitation(invitationId: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
+      // Check if API token is configured
+      if (!this.apiToken || this.apiToken.trim() === '') {
+        console.error('AdWhats API token is not configured');
+        throw new Error('WhatsApp API token is not configured. Please set ADWHATS_API_TOKEN in environment variables.');
+      }
+
+      console.log(`[WhatsApp] Sending invitation for invitationId: ${invitationId}`);
+
       // Get invitation with match and player details
       const invitation = await this.invitationsService.findOne(invitationId);
       if (!invitation) {
+        console.error(`[WhatsApp] Invitation not found: ${invitationId}`);
         throw new Error('Invitation not found');
       }
 
       // Get match details
       const matchData = await this.matchesService.findOne(invitation.match_id);
       if (!matchData) {
+        console.error(`[WhatsApp] Match not found: ${invitation.match_id}`);
         throw new Error('Match not found');
       }
 
       // Get player details
       const playerData = await this.playersService.findOne(invitation.player_id);
       if (!playerData) {
+        console.error(`[WhatsApp] Player not found: ${invitation.player_id}`);
         throw new Error('Player not found');
       }
 
       const match = matchData;
       const player = playerData;
+
+      console.log(`[WhatsApp] Sending to player: ${player.name} (${player.phone})`);
 
       // Format scheduled time
       const scheduledTime = new Date(match.scheduled_time);
@@ -85,11 +98,15 @@ export class WhatsAppService {
       });
 
       // Get court name
-      const { data: courtData } = await this.supabase
+      const { data: courtData, error: courtError } = await this.supabase
         .from('courts')
         .select('name')
         .eq('id', match.court_id)
         .single();
+
+      if (courtError) {
+        console.warn(`[WhatsApp] Error fetching court: ${courtError.message}`);
+      }
 
       const courtName = courtData?.name || 'Court';
 
@@ -98,6 +115,10 @@ export class WhatsAppService {
 
       // Format phone number (remove + and ensure proper format)
       const phoneNumber = player.phone.replace(/^\+/, '').replace(/\s/g, '');
+
+      console.log(`[WhatsApp] Sending message to ${phoneNumber} via AdWhats API`);
+      console.log(`[WhatsApp] API URL: ${this.apiUrl}/messages/send`);
+      console.log(`[WhatsApp] Account ID: ${this.whatsappAccountId}`);
 
       // Send via AdWhats API
       const response = await fetch(`${this.apiUrl}/messages/send`, {
@@ -113,17 +134,30 @@ export class WhatsAppService {
         }),
       });
 
+      const responseText = await response.text();
+      console.log(`[WhatsApp] API Response Status: ${response.status}`);
+      console.log(`[WhatsApp] API Response Body: ${responseText}`);
+
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`AdWhats API error: ${error}`);
+        throw new Error(`AdWhats API error (${response.status}): ${responseText}`);
       }
 
-      const result = await response.json();
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        // If response is not JSON, treat it as error
+        throw new Error(`AdWhats API returned invalid JSON: ${responseText}`);
+      }
       
       // AdWhats API returns { status: "success" } on success
       if (result.status !== 'success') {
-        throw new Error(`AdWhats API returned error: ${result.message || 'Unknown error'}`);
+        const errorMsg = result.message || result.error || 'Unknown error';
+        console.error(`[WhatsApp] API returned error: ${errorMsg}`);
+        throw new Error(`AdWhats API returned error: ${errorMsg}`);
       }
+
+      console.log(`[WhatsApp] Message sent successfully to ${player.name}`);
 
       // Update invitation status
       await this.invitationsService.update(invitationId, {
@@ -131,10 +165,11 @@ export class WhatsAppService {
         sent_at: new Date().toISOString(),
       });
 
-      return { success: true };
+      return { success: true, messageId: result.message_id || result.id };
     } catch (error) {
-      console.error('Error sending WhatsApp invitation:', error);
-      return { success: false, error: error.message };
+      console.error('[WhatsApp] Error sending invitation:', error);
+      console.error('[WhatsApp] Error stack:', error.stack);
+      return { success: false, error: error.message || 'Unknown error occurred' };
     }
   }
 

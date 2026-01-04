@@ -116,14 +116,34 @@ function AppContent() {
       );
 
       // Send WhatsApp invitations
+      const invitationResults = [];
       for (const invitation of invitations) {
-        await api.post('/whatsapp/send-invitation', { invitationId: invitation.id });
+        try {
+          const result = await api.post('/whatsapp/send-invitation', { invitationId: invitation.id });
+          invitationResults.push({ invitationId: invitation.id, success: result.success });
+          if (!result.success) {
+            console.error(`Failed to send invitation ${invitation.id}:`, result.error);
+          }
+        } catch (error: any) {
+          console.error(`Error sending invitation ${invitation.id}:`, error);
+          invitationResults.push({ invitationId: invitation.id, success: false, error: error.message });
+        }
+      }
+
+      // Check if any invitations failed
+      const failedInvitations = invitationResults.filter(r => !r.success);
+      if (failedInvitations.length > 0) {
+        const errorMsg = `Failed to send ${failedInvitations.length} invitation(s). Check console for details.`;
+        console.error('Failed invitations:', failedInvitations);
+        alert(errorMsg);
+      } else {
+        alert('Match created and invitations sent successfully!');
       }
 
       setShowCreateMatch(false);
     } catch (error) {
       console.error('Error creating match:', error);
-      alert('Failed to create match');
+      alert('Failed to create match: ' + (error as Error).message);
     }
   };
 
