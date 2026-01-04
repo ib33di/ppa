@@ -9,7 +9,11 @@ import { MatchesModule } from '../matches/matches.module';
   controllers: [WhatsAppController],
   providers: [WhatsAppService],
   exports: [WhatsAppService],
-  imports: [forwardRef(() => InvitationsModule), PlayersModule, MatchesModule],
+  imports: [
+    forwardRef(() => InvitationsModule),
+    PlayersModule,
+    forwardRef(() => MatchesModule),
+  ],
 })
 export class WhatsAppModule {}
 
