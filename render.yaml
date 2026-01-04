@@ -3,7 +3,7 @@ services:
     name: ppa-backend
     env: node
     rootDir: backend
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && ./node_modules/.bin/nest build
     startCommand: npm run start:prod
     plan: free
     envVars:
