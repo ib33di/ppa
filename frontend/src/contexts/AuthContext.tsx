@@ -43,8 +43,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
         .then(userData => {
           // Create a user object from backend response
-          const userRole = userData.role || 'user';
-          console.log('User profile loaded:', { email: userData.email, role: userRole });
+          // Filter out 'authenticated' as it's not a valid role
+          let userRole = userData.role || 'user';
+          if (userRole === 'authenticated') {
+            userRole = 'user';
+          }
+          console.log('User profile loaded:', { email: userData.email, role: userRole, rawRole: userData.role });
           setUser({
             id: userData.id,
             email: userData.email,
@@ -92,8 +96,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('access_token', result.access_token);
     
     // Update user state
-    const userRole = result.user.role || 'user';
-    console.log('User logged in:', { email: result.user.email, role: userRole });
+    // Filter out 'authenticated' as it's not a valid role
+    let userRole = result.user.role || 'user';
+    if (userRole === 'authenticated') {
+      userRole = 'user';
+    }
+    console.log('User logged in:', { email: result.user.email, role: userRole, rawRole: result.user.role });
     setUser({
       id: result.user.id,
       email: result.user.email,
@@ -129,8 +137,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('access_token', result.access_token);
     
     // Update user state
-    const userRole = result.user.role || 'user';
-    console.log('User registered:', { email: result.user.email, role: userRole });
+    // Filter out 'authenticated' as it's not a valid role
+    let userRole = result.user.role || 'user';
+    if (userRole === 'authenticated') {
+      userRole = 'user';
+    }
+    console.log('User registered:', { email: result.user.email, role: userRole, rawRole: result.user.role });
     setUser({
       id: result.user.id,
       email: result.user.email,

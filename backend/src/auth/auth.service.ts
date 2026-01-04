@@ -25,13 +25,36 @@ export class AuthService {
     }
 
     // Get role from user_profiles table
-    const { data: profile } = await this.supabase
+    const { data: profile, error: profileError } = await this.supabase
       .from('user_profiles')
       .select('role, name')
       .eq('id', data.user.id)
       .single();
 
-    const userRole = profile?.role || data.user.user_metadata?.role || 'user';
+    // If profile doesn't exist, create it
+    let userRole = profile?.role || data.user.user_metadata?.role || 'user';
+    
+    if (profileError && profileError.code === 'PGRST116') {
+      // Profile doesn't exist, create it
+      const { data: newProfile } = await this.supabase
+        .from('user_profiles')
+        .insert({
+          id: data.user.id,
+          name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User',
+          role: userRole,
+        })
+        .select()
+        .single();
+      
+      if (newProfile) {
+        userRole = newProfile.role;
+      }
+    }
+    
+    // Don't use 'authenticated' as role
+    if (userRole === 'authenticated') {
+      userRole = 'user';
+    }
 
     // Generate JWT token
     const payload = {
@@ -72,11 +95,24 @@ export class AuthService {
       throw new UnauthorizedException(error?.message || 'Registration failed');
     }
 
+    // Create user profile in user_profiles table
+    const { data: profile } = await this.supabase
+      .from('user_profiles')
+      .insert({
+        id: data.user.id,
+        name: name || data.user.email?.split('@')[0] || 'User',
+        role: role,
+      })
+      .select()
+      .single();
+
+    const userRole = profile?.role || role;
+
     // Generate JWT token
     const payload = {
       sub: data.user.id,
       email: data.user.email,
-      role: data.user.user_metadata?.role || 'user',
+      role: userRole,
     };
 
     const accessToken = this.jwtService.sign(payload);
@@ -86,8 +122,8 @@ export class AuthService {
       user: {
         id: data.user.id,
         email: data.user.email,
-        role: data.user.user_metadata?.role || 'user',
-        name: data.user.user_metadata?.name,
+        role: userRole,
+        name: profile?.name || name || data.user.email?.split('@')[0] || 'User',
       },
     };
   }
@@ -101,17 +137,45 @@ export class AuthService {
     }
 
     // Get role from user_profiles table
-    const { data: profile } = await this.supabase
+    const { data: profile, error: profileError } = await this.supabase
       .from('user_profiles')
       .select('role, name')
       .eq('id', userId)
       .single();
 
+    // If profile doesn't exist, create it with default role
+    if (profileError && profileError.code === 'PGRST116') {
+      // Profile doesn't exist, create it
+      const defaultRole = user.user_metadata?.role || 'user';
+      await this.supabase
+        .from('user_profiles')
+        .insert({
+          id: userId,
+          name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          role: defaultRole,
+        })
+        .select()
+        .single();
+      
+      return {
+        id: user.id,
+        email: user.email,
+        role: defaultRole,
+        name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+      };
+    }
+
+    // Use profile role, fallback to user_metadata, then default to 'user'
+    const userRole = profile?.role || user.user_metadata?.role || 'user';
+    
+    // Don't use 'authenticated' as role - it's a Supabase auth status, not a user role
+    const finalRole = userRole === 'authenticated' ? 'user' : userRole;
+
     return {
       id: user.id,
       email: user.email,
-      role: profile?.role || user.user_metadata?.role || 'user',
-      name: profile?.name || user.user_metadata?.name,
+      role: finalRole,
+      name: profile?.name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
     };
   }
 
