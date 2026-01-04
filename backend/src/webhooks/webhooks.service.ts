@@ -26,9 +26,17 @@ export class WebhooksService {
    */
   async handleWhatsAppWebhook(payload: any): Promise<{ success: boolean; message?: string }> {
     try {
+      console.log('[Webhook] Processing WhatsApp message:', {
+        from: payload.from,
+        message: payload.message,
+        accountId: payload.whatsapp_account_id,
+        timestamp: new Date().toISOString(),
+      });
+
       const { from, message, whatsapp_account_id } = payload;
 
       if (!from || !message) {
+        console.warn('[Webhook] Missing required fields:', { from, message });
         return { success: false, message: 'Missing required fields' };
       }
 
