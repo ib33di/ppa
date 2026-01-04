@@ -8,5 +8,9 @@ export class UpdateInvitationDto {
   @IsOptional()
   @IsString()
   whatsapp_message_id?: string;
+
+  @IsOptional()
+  @IsString()
+  sent_at?: string;
 }
 

@@ -29,7 +29,7 @@ export class SupabaseService implements OnModuleInit {
   }
 
   // Helper methods for common operations
-  async from(table: string) {
+  from(table: string) {
     return this.client.from(table);
   }
 }

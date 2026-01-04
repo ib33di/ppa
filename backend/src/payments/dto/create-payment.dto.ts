@@ -25,5 +25,10 @@ export class CreatePaymentDto {
   @IsOptional()
   @IsString()
   payment_provider?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['pending', 'paid', 'failed', 'refunded'])
+  status?: string;
 }
 
