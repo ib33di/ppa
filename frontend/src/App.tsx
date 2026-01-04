@@ -116,10 +116,13 @@ function AppContent() {
       );
 
       // Send WhatsApp invitations
-      const invitationResults = [];
+      const invitationResults: Array<{ invitationId: string; success: boolean; error?: string }> = [];
       for (const invitation of invitations) {
         try {
-          const result = await api.post('/whatsapp/send-invitation', { invitationId: invitation.id });
+          const result = await api.post<{ success: boolean; error?: string; messageId?: string }>(
+            '/whatsapp/send-invitation', 
+            { invitationId: invitation.id }
+          );
           invitationResults.push({ invitationId: invitation.id, success: result.success });
           if (!result.success) {
             console.error(`Failed to send invitation ${invitation.id}:`, result.error);
