@@ -8,6 +8,7 @@ import { PlayersModule } from './players/players.module';
 import { CourtsModule } from './courts/courts.module';
 import { MatchesModule } from './matches/matches.module';
 import { InvitationsModule } from './invitations/invitations.module';
+import { InvitationsSendModule } from './invitations/invitations-send.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -25,6 +26,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     CourtsModule,
     MatchesModule,
     InvitationsModule,
+    InvitationsSendModule,
     WhatsAppModule,
     WebhooksModule,
     PaymentsModule,
