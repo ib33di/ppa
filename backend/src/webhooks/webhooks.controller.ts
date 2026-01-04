@@ -6,6 +6,29 @@ import { WebhooksService } from './webhooks.service';
 export class WebhooksController {
   constructor(private readonly webhooksService: WebhooksService) {}
 
+  private safeStringify(input: any) {
+    const seen = new WeakSet();
+    const redactKeys = new Set(['token', 'authorization', 'api_key', 'apikey', 'password', 'secret', 'webhook-token', 'webhook_token']);
+
+    return JSON.stringify(
+      input,
+      (key, value) => {
+        if (typeof value === 'object' && value !== null) {
+          if (seen.has(value)) return '[Circular]';
+          seen.add(value);
+        }
+
+        const lowered = (key || '').toLowerCase();
+        if (lowered && [...redactKeys].some((rk) => lowered.includes(rk))) {
+          return value ? '***' : value;
+        }
+
+        return value;
+      },
+      2,
+    );
+  }
+
   @Get('whatsapp')
   @Public()
   @HttpCode(HttpStatus.OK)
@@ -26,14 +49,12 @@ export class WebhooksController {
     // Log incoming webhook for debugging
     console.log('[Webhook] ========== WEBHOOK RECEIVED ==========');
     console.log('[Webhook] Received WhatsApp webhook:', {
-      payload,
       payloadType: typeof payload,
       payloadKeys: payload ? Object.keys(payload) : 'null',
-      headers: Object.keys(headers),
+      headerKeys: Object.keys(headers || {}),
       timestamp: new Date().toISOString(),
     });
-    console.log('[Webhook] Full payload JSON:', JSON.stringify(payload, null, 2));
-    console.log('[Webhook] Headers:', JSON.stringify(headers, null, 2));
+    console.log('[Webhook] Full payload (redacted):', this.safeStringify(payload));
     
     // Log specific message fields for debugging
     if (payload) {
@@ -82,16 +103,40 @@ export class WebhooksController {
   @Post('whatsapp/test')
   @Public()
   @HttpCode(HttpStatus.OK)
-  async testWebhook(@Body() testPayload: { from?: string; body?: string; message?: string }) {
+  async testWebhook(
+    @Body()
+    testPayload: {
+      from?: string;
+      body?: string;
+      message?: string;
+      button_id?: string;
+      interactive?: any;
+    },
+  ) {
     // Test endpoint to simulate webhook calls
     console.log('[Webhook] ========== TEST WEBHOOK CALLED ==========');
     console.log('[Webhook] Test payload:', JSON.stringify(testPayload, null, 2));
     
-    const payload = {
+    const payload: any = {
       from: testPayload.from || '966512345678',
       body: testPayload.body || testPayload.message || 'YES',
       type: 'chat',
     };
+
+    if (testPayload.button_id) {
+      payload.button_id = testPayload.button_id;
+      // In many UltraMsg/WhatsApp payloads, body may be empty on button clicks.
+      if (!testPayload.body && !testPayload.message) {
+        payload.body = '';
+      }
+    }
+
+    if (testPayload.interactive) {
+      payload.interactive = testPayload.interactive;
+      if (!testPayload.body && !testPayload.message) {
+        payload.body = '';
+      }
+    }
     
     const result = await this.webhooksService.handleWhatsAppWebhook(payload);
     return {
