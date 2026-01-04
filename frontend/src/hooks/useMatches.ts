@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Match } from '../types';
+import { api } from '../lib/api';
 
 export function useMatches() {
   const [matches, setMatches] = useState<Match[]>([]);
@@ -8,24 +9,8 @@ export function useMatches() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    // Wait for Supabase session before fetching
     const initializeAndFetch = async () => {
       try {
-        // Ensure we have a session - wait up to 2 seconds for auth to complete
-        let session = null;
-        for (let i = 0; i < 4; i++) {
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
-          if (currentSession) {
-            session = currentSession;
-            break;
-          }
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        
-        if (!session) {
-          console.warn('No Supabase session found after waiting, fetching anyway (RLS policies should allow)');
-        }
-        
         await fetchMatches();
 
         // Subscribe to real-time updates for matches
@@ -90,23 +75,8 @@ export function useMatches() {
     try {
       setLoading(true);
       setError(null);
-      const { data, error } = await supabase
-        .from('matches')
-        .select(`
-          *,
-          court:courts(*),
-          invitations(
-            *,
-            player:players(*)
-          )
-        `)
-        .order('scheduled_time', { ascending: true });
-
-      if (error) {
-        console.error('Supabase error fetching matches:', error);
-        throw error;
-      }
-      setMatches(data as Match[]);
+      const data = await api.get<Match[]>('/matches');
+      setMatches(data);
     } catch (err) {
       console.error('Error fetching matches:', err);
       setError(err as Error);

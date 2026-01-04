@@ -5,6 +5,7 @@ import { Icon } from './Icons';
 interface LiveCourtStatusGridProps {
   matches: Match[];
   courts: Court[];
+  times: string[];
   selectedSlot?: { courtId: string; time: string } | null;
   onSlotClick?: (courtId: string, time: string, match?: Match) => void;
 }
@@ -12,10 +13,25 @@ interface LiveCourtStatusGridProps {
 export const LiveCourtStatusGrid: React.FC<LiveCourtStatusGridProps> = ({ 
   matches, 
   courts, 
+  times,
   selectedSlot,
   onSlotClick 
 }) => {
-  const times = ['17:00', '18:30', '20:00', '21:30'];
+  const isCourtAllowedAtTime = (court: Court, time: string) => {
+    const ranges = court.availability || [];
+    if (ranges.length === 0) return true; // Backward compatible: no rules => allowed
+
+    const toMin = (hhmm: string) => {
+      const [h, m] = hhmm.split(':').map((v) => parseInt(v, 10));
+      return h * 60 + m;
+    };
+    const t = toMin(time);
+    return ranges.some((r) => {
+      const start = toMin(String(r.start_time).slice(0, 5));
+      const end = toMin(String(r.end_time).slice(0, 5));
+      return t >= start && t < end;
+    });
+  };
 
   const getMatchForSlot = (courtId: string, time: string): Match | undefined => {
     return matches.find(m => {
@@ -116,8 +132,14 @@ export const LiveCourtStatusGrid: React.FC<LiveCourtStatusGridProps> = ({
 
       {/* Grid */}
       <div className="flex-1 overflow-auto p-6">
-        <div className="grid grid-cols-4 gap-4">
+        <div
+          className="grid gap-4"
+          style={{
+            gridTemplateColumns: `80px repeat(${courts.length}, minmax(0, 1fr))`,
+          }}
+        >
           {/* Court Headers */}
+          <div />
           {courts.map(court => (
             <div key={court.id} className="text-center">
               <div className="text-xs font-bold text-zinc-500 uppercase mb-2">
@@ -133,6 +155,7 @@ export const LiveCourtStatusGrid: React.FC<LiveCourtStatusGridProps> = ({
                 {time}
               </div>
               {courts.map(court => {
+                const isAllowed = isCourtAllowedAtTime(court, time);
                 const match = getMatchForSlot(court.id, time);
                 const slotStatus = getSlotStatus(match);
                 const isSelected = selectedSlot?.courtId === court.id && selectedSlot?.time === time;
@@ -140,14 +163,21 @@ export const LiveCourtStatusGrid: React.FC<LiveCourtStatusGridProps> = ({
                 return (
                   <div
                     key={`${court.id}-${time}`}
-                    onClick={() => onSlotClick?.(court.id, time, match)}
-                    className={getSlotStyles(slotStatus.status, isSelected)}
+                    onClick={() => {
+                      if (!isAllowed) return;
+                      onSlotClick?.(court.id, time, match);
+                    }}
+                    className={getSlotStyles(!isAllowed ? 'private' : slotStatus.status, isSelected)}
                   >
-                    {slotStatus.status === 'open' && (
+                    {!isAllowed && (
+                      <div className="text-[10px] text-zinc-500 font-bold">OFF HOURS</div>
+                    )}
+
+                    {isAllowed && slotStatus.status === 'open' && (
                       <Icon name="plus" className="w-4 h-4 text-zinc-600" />
                     )}
                     
-                    {slotStatus.status === 'booked' && (
+                    {isAllowed && slotStatus.status === 'booked' && (
                       <>
                         <Icon name="lock" className="w-5 h-5 text-zinc-600 mb-1" />
                         {match && match.invitations && match.invitations.length > 0 && (
@@ -159,7 +189,7 @@ export const LiveCourtStatusGrid: React.FC<LiveCourtStatusGridProps> = ({
                       </>
                     )}
                     
-                    {slotStatus.status === 'filling' && (
+                    {isAllowed && slotStatus.status === 'filling' && (
                       <>
                         <div className="flex items-center gap-1 mb-1">
                           <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
@@ -173,7 +203,7 @@ export const LiveCourtStatusGrid: React.FC<LiveCourtStatusGridProps> = ({
                       </>
                     )}
                     
-                    {slotStatus.status === 'confidence' && (
+                    {isAllowed && slotStatus.status === 'confidence' && (
                       <>
                         <div className="w-2 h-2 rounded-full bg-emerald-500 mb-1"></div>
                         <div className="text-[10px] font-bold text-emerald-400">
@@ -182,11 +212,11 @@ export const LiveCourtStatusGrid: React.FC<LiveCourtStatusGridProps> = ({
                       </>
                     )}
                     
-                    {slotStatus.status === 'training' && (
+                    {isAllowed && slotStatus.status === 'training' && (
                       <div className="text-[10px] text-purple-400 font-bold">TRAINING</div>
                     )}
                     
-                    {slotStatus.status === 'private' && (
+                    {isAllowed && slotStatus.status === 'private' && (
                       <div className="text-[10px] text-zinc-400 font-bold">PRIVATE</div>
                     )}
                   </div>

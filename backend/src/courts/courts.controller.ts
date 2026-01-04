@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -19,8 +19,8 @@ export class CourtsController {
   }
 
   @Get()
-  findAll() {
-    return this.courtsService.findAll();
+  findAll(@Query('all') all?: string) {
+    return this.courtsService.findAll(all === 'true' || all === '1');
   }
 
   @Get(':id')

@@ -24,8 +24,15 @@ export interface Court {
   id: string;
   name: string;
   is_active: boolean;
+  availability?: CourtAvailabilityRange[];
   created_at?: string;
   updated_at?: string;
+}
+
+export interface CourtAvailabilityRange {
+  id: string;
+  start_time: string; // "HH:MM:SS" or "HH:MM"
+  end_time: string;   // "HH:MM:SS" or "HH:MM"
 }
 
 export interface Match {

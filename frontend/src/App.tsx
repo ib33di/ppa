@@ -11,8 +11,7 @@ import { LiveMatchesPanel } from './components/LiveMatchesPanel';
 import { OperatorFocusPanel } from './components/OperatorFocusPanel';
 import { LiveCourtStatusGrid } from './components/LiveCourtStatusGrid';
 import { CourtDetailsPanel } from './components/CourtDetailsPanel';
-import { Match, SlotData } from './types';
-import { api } from './lib/api';
+import { Court, SlotData } from './types';
 
 type ViewState = 'live' | 'players' | 'matchmaking' | 'analytics' | 'scheduled' | 'admin';
 
@@ -22,7 +21,6 @@ function AppContent() {
   const { players: playersList, loading: playersLoading, refetch: refetchPlayers } = usePlayers();
   const { courts: courtsList, loading: courtsLoading, refetch: refetchCourts, refetchAll: refetchAllCourts } = useCourts();
   const [, setSelectedSlot] = useState<SlotData | null>(null);
-  const [showCreateMatch, setShowCreateMatch] = useState(false);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddCourt, setShowAddCourt] = useState(false);
   const [selectedCourtSlot, setSelectedCourtSlot] = useState<{ courtId: string; time: string } | null>(null);
@@ -101,58 +99,39 @@ function AppContent() {
     return slots;
   };
 
-  const handleCreateMatch = async (courtId: string, scheduledTime: string, playerIds: string[]) => {
-    try {
-      // Create match
-      const match = await api.post<Match>('/matches', {
-        court_id: courtId,
-        scheduled_time: scheduledTime,
-        status: 'Inviting',
-        target_count: 4,
-      });
+  const getTimeSlotsForGrid = (courts: Court[]): string[] => {
+    // Generate times from availability ranges; fallback to legacy default times.
+    const legacy = ['17:00', '18:30', '20:00', '21:30'];
 
-      // Create invitations
-      const invitations = await api.post<Array<{ id: string }>>('/invitations/batch', 
-        playerIds.map(playerId => ({
-          match_id: match.id,
-          player_id: playerId,
-          status: 'pending',
-        }))
-      );
+    const toMin = (hhmm: string) => {
+      const [h, m] = hhmm.split(':').map((v) => parseInt(v, 10));
+      return h * 60 + m;
+    };
+    const toHHMM = (min: number) => {
+      const h = String(Math.floor(min / 60)).padStart(2, '0');
+      const m = String(min % 60).padStart(2, '0');
+      return `${h}:${m}`;
+    };
 
-      // Send WhatsApp invitations
-      const invitationResults: Array<{ invitationId: string; success: boolean; error?: string }> = [];
-      for (const invitation of invitations) {
-        try {
-          const result = await api.post<{ success: boolean; error?: string; messageId?: string }>(
-            '/whatsapp/send-invitation', 
-            { invitationId: invitation.id }
-          );
-          invitationResults.push({ invitationId: invitation.id, success: result.success });
-          if (!result.success) {
-            console.error(`Failed to send invitation ${invitation.id}:`, result.error);
-          }
-        } catch (error: any) {
-          console.error(`Error sending invitation ${invitation.id}:`, error);
-          invitationResults.push({ invitationId: invitation.id, success: false, error: error.message });
+    const step = 90; // matches existing grid cadence (17:00 -> 18:30 -> ...)
+    const all = new Set<string>();
+    let hasAnyRules = false;
+
+    courts.forEach((c) => {
+      const ranges = c.availability || [];
+      if (ranges.length === 0) return;
+      hasAnyRules = true;
+      ranges.forEach((r) => {
+        const start = toMin(String(r.start_time).slice(0, 5));
+        const end = toMin(String(r.end_time).slice(0, 5));
+        for (let t = start; t < end; t += step) {
+          all.add(toHHMM(t));
         }
-      }
+      });
+    });
 
-      // Check if any invitations failed
-      const failedInvitations = invitationResults.filter(r => !r.success);
-      if (failedInvitations.length > 0) {
-        const errorDetails = failedInvitations.map(f => f.error || 'Unknown error').join(', ');
-        console.error('Failed invitations:', failedInvitations);
-        alert(`Failed to send ${failedInvitations.length} invitation(s). Errors: ${errorDetails}`);
-      } else {
-        alert('Match created and invitations sent successfully!');
-      }
-
-      setShowCreateMatch(false);
-    } catch (error) {
-      console.error('Error creating match:', error);
-      alert('Failed to create match: ' + (error as Error).message);
-    }
+    const times = [...all].sort((a, b) => toMin(a) - toMin(b));
+    return (hasAnyRules && times.length > 0) ? times : legacy;
   };
 
   if (matchesLoading || playersLoading || courtsLoading) {
@@ -164,6 +143,7 @@ function AppContent() {
   }
 
   const slotData = getSlotData();
+  const times = getTimeSlotsForGrid(courtsList);
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans flex overflow-hidden">
@@ -213,8 +193,8 @@ function AppContent() {
               </button>
             )}
             <button
-              onClick={() => setShowCreateMatch(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+              onClick={() => alert('Create matches from the center grid by selecting a court + time slot.')}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
             >
               <Icon name="plus" className="w-4 h-4" />
               Create Match
@@ -301,6 +281,7 @@ function AppContent() {
               <LiveCourtStatusGrid
                 matches={matches}
                 courts={courtsList}
+                times={times}
                 selectedSlot={selectedCourtSlot}
                 onSlotClick={(courtId, time, match) => {
                   setSelectedCourtSlot({ courtId, time });
@@ -325,7 +306,9 @@ function AppContent() {
                   <CourtDetailsPanel
                     match={selectedMatch || null}
                     courtName={court?.name || 'Court'}
+                    courtId={selectedCourtSlot.courtId}
                     time={selectedCourtSlot.time}
+                    players={playersList}
                     onClose={() => setSelectedCourtSlot(null)}
                   />
                 );
@@ -547,108 +530,6 @@ function AppContent() {
           }}
         />
       )}
-
-      {/* Create Match Modal */}
-      {showCreateMatch && (
-        <CreateMatchModal
-          courts={courtsList}
-          players={playersList}
-          onClose={() => setShowCreateMatch(false)}
-          onCreate={handleCreateMatch}
-        />
-      )}
-    </div>
-  );
-}
-
-function CreateMatchModal({ courts, players, onClose, onCreate }: any) {
-  const [selectedCourt, setSelectedCourt] = useState('');
-  const [selectedTime, setSelectedTime] = useState('');
-  const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
-
-  const handleSubmit = () => {
-    if (!selectedCourt || !selectedTime || selectedPlayers.length === 0) {
-      alert('Please fill all fields');
-      return;
-    }
-
-    const date = new Date();
-    date.setHours(parseInt(selectedTime.split(':')[0]));
-    date.setMinutes(parseInt(selectedTime.split(':')[1]));
-
-    onCreate(selectedCourt, date.toISOString(), selectedPlayers);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 w-full max-w-md">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-white">Create Match</h3>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white">
-            <Icon name="x" className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-zinc-400 mb-2 block">Court</label>
-            <select
-              value={selectedCourt}
-              onChange={(e) => setSelectedCourt(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-white"
-            >
-              <option value="">Select court</option>
-              {courts.map((court: any) => (
-                <option key={court.id} value={court.id}>{court.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-zinc-400 mb-2 block">Time</label>
-            <select
-              value={selectedTime}
-              onChange={(e) => setSelectedTime(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-white"
-            >
-              <option value="">Select time</option>
-              <option value="17:00">17:00</option>
-              <option value="18:30">18:30</option>
-              <option value="20:00">20:00</option>
-              <option value="21:30">21:30</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-zinc-400 mb-2 block">Players</label>
-            <div className="max-h-48 overflow-y-auto space-y-2">
-              {players.map((player: any) => (
-                <label key={player.id} className="flex items-center gap-2 p-2 hover:bg-zinc-800 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedPlayers.includes(player.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedPlayers([...selectedPlayers, player.id]);
-                      } else {
-                        setSelectedPlayers(selectedPlayers.filter(id => id !== player.id));
-                      }
-                    }}
-                  />
-                  <span className="text-sm text-white">{player.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <button
-            onClick={handleSubmit}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors"
-          >
-            Create & Send Invitations
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

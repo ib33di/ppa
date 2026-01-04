@@ -76,6 +76,44 @@ export class InvitationsService {
     return data;
   }
 
+  /**
+   * Ensure invitations exist for (match_id, player_id) pairs.
+   * Returns the resulting invitation rows (existing + newly created).
+   */
+  async ensureInvitations(matchId: string, playerIds: string[]) {
+    if (!matchId) throw new Error('match_id is required');
+    if (!Array.isArray(playerIds) || playerIds.length === 0) throw new Error('player_ids is required');
+
+    const { data: existing, error: existingError } = await this.supabase
+      .from('invitations')
+      .select('*')
+      .eq('match_id', matchId)
+      .in('player_id', playerIds);
+
+    if (existingError) throw existingError;
+    const existingByPlayer = new Map<string, any>((existing || []).map((i: any) => [i.player_id, i]));
+
+    const toCreate = playerIds
+      .filter((pid) => !existingByPlayer.has(pid))
+      .map((pid) => ({
+        match_id: matchId,
+        player_id: pid,
+        status: 'pending',
+      }));
+
+    let created: any[] = [];
+    if (toCreate.length > 0) {
+      const { data: createdData, error: createdError } = await this.supabase
+        .from('invitations')
+        .insert(toCreate)
+        .select();
+      if (createdError) throw createdError;
+      created = createdData || [];
+    }
+
+    return [...(existing || []), ...created];
+  }
+
   async update(id: string, updateInvitationDto: UpdateInvitationDto) {
     const { data, error } = await this.supabase
       .from('invitations')

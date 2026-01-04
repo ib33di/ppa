@@ -9,6 +9,9 @@ interface AddCourtModalProps {
 
 export function AddCourtModal({ onClose, onSuccess }: AddCourtModalProps) {
   const [name, setName] = useState('');
+  const [ranges, setRanges] = useState<Array<{ start_time: string; end_time: string }>>([
+    { start_time: '07:00', end_time: '23:30' },
+  ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -21,6 +24,9 @@ export function AddCourtModal({ onClose, onSuccess }: AddCourtModalProps) {
       await api.post('/courts', {
         name,
         is_active: true,
+        availability: ranges
+          .filter(r => r.start_time && r.end_time)
+          .map(r => ({ start_time: r.start_time, end_time: r.end_time })),
       });
       onSuccess();
       onClose();
@@ -58,6 +64,54 @@ export function AddCourtModal({ onClose, onSuccess }: AddCourtModalProps) {
               placeholder="e.g., Main Court"
               required
             />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-zinc-400 mb-2 block">Allowed Play Hours (24H)</label>
+            <div className="space-y-2">
+              {ranges.map((r, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={r.start_time}
+                    onChange={(e) => {
+                      const next = [...ranges];
+                      next[idx] = { ...next[idx], start_time: e.target.value };
+                      setRanges(next);
+                    }}
+                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white"
+                  />
+                  <span className="text-xs text-zinc-500">→</span>
+                  <input
+                    type="time"
+                    value={r.end_time}
+                    onChange={(e) => {
+                      const next = [...ranges];
+                      next[idx] = { ...next[idx], end_time: e.target.value };
+                      setRanges(next);
+                    }}
+                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-white"
+                  />
+                  {ranges.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setRanges(ranges.filter((_, i) => i !== idx))}
+                      className="px-2 py-2 text-zinc-500 hover:text-white"
+                      title="Remove range"
+                    >
+                      <Icon name="x" className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setRanges([...ranges, { start_time: '07:00', end_time: '23:30' }])}
+                className="text-xs text-zinc-400 hover:text-white underline underline-offset-4"
+              >
+                Add another time range
+              </button>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">
