@@ -168,57 +168,180 @@ export class WhatsAppService {
       const courtName = courtData?.name || 'Court';
 
       // Build invitation message
-      const message = `Hey ${player.name} 👋\n\nYou're invited to a padel match!\n\n📅 ${timeStr}\n🏟️ ${courtName}\n\nReply YES to confirm or NO to decline.`;
+      const messageText = `Hey ${player.name} 👋\n\nYou're invited to a padel match!\n\n📅 ${timeStr}\n🏟️ ${courtName}\n\nPlease confirm your attendance:`;
 
       // Format phone number (remove + and ensure proper format)
       const phoneNumber = player.phone.replace(/^\+/, '').replace(/\s/g, '');
 
-      console.log(`[WhatsApp] Sending message to ${phoneNumber} via AdWhats API`);
+      console.log(`[WhatsApp] Sending interactive message to ${phoneNumber} via AdWhats API`);
       console.log(`[WhatsApp] API URL: ${this.apiUrl}/messages/send`);
       console.log(`[WhatsApp] Account ID: ${this.whatsappAccountId}`);
 
+      // Try to send with interactive buttons (WhatsApp Business API format)
+      // If AdWhats doesn't support this format, fallback to text message
+      const payload: any = {
+        whatsapp_account_id: this.whatsappAccountId,
+        to: phoneNumber,
+      };
+
+      // Try interactive message format first (WhatsApp Business API format)
+      // If AdWhats doesn't support this, we'll fallback to text message
+      let useInteractive = true;
+      let payloadToSend: any = {
+        whatsapp_account_id: this.whatsappAccountId,
+        to: phoneNumber,
+      };
+
+      // Try interactive buttons format
+      if (useInteractive) {
+        try {
+          // WhatsApp Business API interactive message format
+          payloadToSend.type = 'interactive';
+          payloadToSend.interactive = {
+            type: 'button',
+            body: {
+              text: messageText,
+            },
+            action: {
+              buttons: [
+                {
+                  type: 'reply',
+                  reply: {
+                    id: 'yes_' + invitationId,
+                    title: '✅ YES',
+                  },
+                },
+                {
+                  type: 'reply',
+                  reply: {
+                    id: 'no_' + invitationId,
+                    title: '❌ NO',
+                  },
+                },
+              ],
+            },
+          };
+
+          console.log('[WhatsApp] Attempting to send interactive message with buttons');
+        } catch (error) {
+          console.warn('[WhatsApp] Error creating interactive payload, falling back to text:', error);
+          useInteractive = false;
+        }
+      }
+
+      // If not using interactive, use simple text message
+      if (!useInteractive) {
+        payloadToSend.message = `${messageText}\n\nReply YES to confirm or NO to decline.`;
+      }
+
       // Send via AdWhats API
-      const response = await fetch(`${this.apiUrl}/messages/send`, {
-        method: 'POST',
-        headers: {
-          'token': this.apiToken,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          whatsapp_account_id: this.whatsappAccountId,
-          to: phoneNumber,
-          message: message,
-        }),
-      });
+      let response: Response;
+      let responseText: string;
+      let result: any;
 
-      const responseText = await response.text();
-      console.log(`[WhatsApp] API Response Status: ${response.status}`);
-      console.log(`[WhatsApp] API Response Body: ${responseText}`);
-
-      if (!response.ok) {
-        throw new Error(`AdWhats API error (${response.status}): ${responseText}`);
-      }
-
-      let result;
       try {
-        result = JSON.parse(responseText);
-      } catch (parseError) {
-        // If response is not JSON, treat it as error
-        throw new Error(`AdWhats API returned invalid JSON: ${responseText}`);
-      }
-      
-      // AdWhats API returns { status: "success" } on success
-      if (result.status !== 'success') {
-        const errorMsg = result.message || result.error || 'Unknown error';
-        console.error(`[WhatsApp] API returned error: ${errorMsg}`);
-        
-        // Provide helpful error messages for common issues
-        let helpfulError = errorMsg;
-        if (errorMsg.includes('permissions') || errorMsg.includes('permission')) {
-          helpfulError = `${errorMsg}. Please verify: 1) Your API token is valid and has send message permissions, 2) Account ID ${this.whatsappAccountId} exists and is active, 3) Your AdWhats account has the required permissions.`;
+        response = await fetch(`${this.apiUrl}/messages/send`, {
+          method: 'POST',
+          headers: {
+            'token': this.apiToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payloadToSend),
+        });
+
+        responseText = await response.text();
+        console.log(`[WhatsApp] API Response Status: ${response.status}`);
+        console.log(`[WhatsApp] API Response Body: ${responseText}`);
+
+        if (!response.ok) {
+          throw new Error(`AdWhats API error (${response.status}): ${responseText}`);
+        }
+
+        try {
+          result = JSON.parse(responseText);
+        } catch (parseError) {
+          throw new Error(`AdWhats API returned invalid JSON: ${responseText}`);
         }
         
-        throw new Error(`AdWhats API returned error: ${helpfulError}`);
+        // If interactive message failed, try fallback to text message
+        if (result.status !== 'success' && useInteractive) {
+          const errorMsg = result.message || result.error || 'Unknown error';
+          console.warn(`[WhatsApp] Interactive message failed: ${errorMsg}, trying text message fallback`);
+          
+          // Fallback to text message
+          payloadToSend = {
+            whatsapp_account_id: this.whatsappAccountId,
+            to: phoneNumber,
+            message: `${messageText}\n\nReply YES to confirm or NO to decline.`,
+          };
+
+          response = await fetch(`${this.apiUrl}/messages/send`, {
+            method: 'POST',
+            headers: {
+              'token': this.apiToken,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payloadToSend),
+          });
+
+          responseText = await response.text();
+          console.log(`[WhatsApp] Fallback API Response Status: ${response.status}`);
+          console.log(`[WhatsApp] Fallback API Response Body: ${responseText}`);
+
+          if (!response.ok) {
+            throw new Error(`AdWhats API error (${response.status}): ${responseText}`);
+          }
+
+          result = JSON.parse(responseText);
+        }
+        
+        // AdWhats API returns { status: "success" } on success
+        if (result.status !== 'success') {
+          const errorMsg = result.message || result.error || 'Unknown error';
+          console.error(`[WhatsApp] API returned error: ${errorMsg}`);
+          
+          // Provide helpful error messages for common issues
+          let helpfulError = errorMsg;
+          if (errorMsg.includes('permissions') || errorMsg.includes('permission')) {
+            helpfulError = `${errorMsg}. Please verify: 1) Your API token is valid and has send message permissions, 2) Account ID ${this.whatsappAccountId} exists and is active, 3) Your AdWhats account has the required permissions.`;
+          }
+          
+          throw new Error(`AdWhats API returned error: ${helpfulError}`);
+        }
+      } catch (error: any) {
+        // If error and we were trying interactive, fallback to text
+        if (useInteractive && error.message && !error.message.includes('fallback')) {
+          console.warn('[WhatsApp] Interactive message failed, trying text fallback:', error.message);
+          try {
+            payloadToSend = {
+              whatsapp_account_id: this.whatsappAccountId,
+              to: phoneNumber,
+              message: `${messageText}\n\nReply YES to confirm or NO to decline.`,
+            };
+
+            response = await fetch(`${this.apiUrl}/messages/send`, {
+              method: 'POST',
+              headers: {
+                'token': this.apiToken,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(payloadToSend),
+            });
+
+            responseText = await response.text();
+            result = JSON.parse(responseText);
+            
+            if (result.status === 'success') {
+              console.log('[WhatsApp] Fallback text message sent successfully');
+            } else {
+              throw error; // Re-throw original error
+            }
+          } catch (fallbackError) {
+            throw error; // Re-throw original error
+          }
+        } else {
+          throw error;
+        }
       }
 
       console.log(`[WhatsApp] Message sent successfully to ${player.name}`);
@@ -344,6 +467,15 @@ export class WhatsAppService {
         timestamp: new Date().toISOString(),
       });
 
+      // Check if this is a button response (starts with yes_ or no_)
+      if (message.startsWith('yes_') || message.toLowerCase().includes('yes_')) {
+        console.log(`[WhatsApp] Detected button response: YES button`);
+        message = 'YES';
+      } else if (message.startsWith('no_') || message.toLowerCase().includes('no_')) {
+        console.log(`[WhatsApp] Detected button response: NO button`);
+        message = 'NO';
+      }
+
       // Normalize message - remove extra whitespace and convert to uppercase
       const normalizedMessage = message.trim().replace(/\s+/g, ' ').toUpperCase();
       console.log(`[WhatsApp] Normalized message: "${normalizedMessage}" (length: ${normalizedMessage.length})`);
@@ -353,10 +485,10 @@ export class WhatsAppService {
       const coreMessage = normalizedMessage.replace(/[.,!?;:]/g, '').trim();
       console.log(`[WhatsApp] Core message: "${coreMessage}"`);
 
-      // YES patterns (case-insensitive)
-      const yesKeywords = ['YES', 'Y', 'SI', 'OK', 'CONFIRM', 'ACCEPT', 'نعم', 'موافق', 'أوافق', 'موافقة'];
-      // NO patterns (case-insensitive)
-      const noKeywords = ['NO', 'N', 'DECLINE', 'REJECT', 'CANCEL', 'لا', 'رفض', 'غير موافق'];
+      // YES patterns (case-insensitive) - also check for button emoji
+      const yesKeywords = ['YES', 'Y', 'SI', 'OK', 'CONFIRM', 'ACCEPT', 'نعم', 'موافق', 'أوافق', 'موافقة', '✅'];
+      // NO patterns (case-insensitive) - also check for button emoji
+      const noKeywords = ['NO', 'N', 'DECLINE', 'REJECT', 'CANCEL', 'لا', 'رفض', 'غير موافق', '❌'];
 
       let isYes = false;
       let isNo = false;
@@ -366,7 +498,8 @@ export class WhatsAppService {
         if (coreMessage === keyword.toUpperCase() || 
             coreMessage.startsWith(keyword.toUpperCase() + ' ') ||
             coreMessage === keyword ||
-            coreMessage.startsWith(keyword + ' ')) {
+            coreMessage.startsWith(keyword + ' ') ||
+            coreMessage.includes(keyword.toUpperCase())) {
           isYes = true;
           console.log(`[WhatsApp] Matched YES keyword: "${keyword}"`);
           break;
@@ -379,7 +512,8 @@ export class WhatsAppService {
           if (coreMessage === keyword.toUpperCase() || 
               coreMessage.startsWith(keyword.toUpperCase() + ' ') ||
               coreMessage === keyword ||
-              coreMessage.startsWith(keyword + ' ')) {
+              coreMessage.startsWith(keyword + ' ') ||
+              coreMessage.includes(keyword.toUpperCase())) {
             isNo = true;
             console.log(`[WhatsApp] Matched NO keyword: "${keyword}"`);
             break;

@@ -35,14 +35,48 @@ export class WebhooksService {
         timestamp: new Date().toISOString(),
       });
 
-      const { from, message, whatsapp_account_id } = payload;
+      const { from, message, whatsapp_account_id, button_id, interactive } = payload;
 
-      if (!from || !message) {
+      // Handle interactive button responses
+      // Button responses may come as button_id or in interactive object
+      let messageText = message;
+      if (button_id) {
+        // Button was clicked - extract response from button_id
+        console.log('[Webhook] Button clicked:', button_id);
+        if (button_id.startsWith('yes_')) {
+          messageText = 'YES';
+        } else if (button_id.startsWith('no_')) {
+          messageText = 'NO';
+        }
+      } else if (interactive?.button_reply?.id) {
+        // Alternative format for button responses
+        const buttonId = interactive.button_reply.id;
+        console.log('[Webhook] Interactive button clicked:', buttonId);
+        if (buttonId.startsWith('yes_')) {
+          messageText = 'YES';
+        } else if (buttonId.startsWith('no_')) {
+          messageText = 'NO';
+        }
+      } else if (interactive?.type === 'button_reply') {
+        // Another format for button responses
+        const buttonId = interactive.button_reply?.id || interactive.id;
+        console.log('[Webhook] Button reply received:', buttonId);
+        if (buttonId && buttonId.startsWith('yes_')) {
+          messageText = 'YES';
+        } else if (buttonId && buttonId.startsWith('no_')) {
+          messageText = 'NO';
+        }
+      }
+
+      if (!from || (!messageText && !button_id && !interactive)) {
         console.warn('[Webhook] Missing required fields:', { 
           from, 
           message,
+          messageText,
+          button_id,
+          interactive,
           hasFrom: !!from,
-          hasMessage: !!message,
+          hasMessage: !!messageText,
           payloadKeys: Object.keys(payload),
         });
         return { success: false, message: 'Missing required fields' };
@@ -51,8 +85,8 @@ export class WebhooksService {
       // Process incoming message (detects YES/NO)
       // Note: AdWhats sends phone number without + prefix (e.g., "966512345678")
       console.log('[Webhook] Calling processIncomingMessage...');
-      console.log('[Webhook] Parameters:', { from, message });
-      const result = await this.whatsappService.processIncomingMessage(from, message);
+      console.log('[Webhook] Parameters:', { from, message: messageText, originalMessage: message });
+      const result = await this.whatsappService.processIncomingMessage(from, messageText);
       console.log('[Webhook] processIncomingMessage result:', JSON.stringify(result, null, 2));
 
       if (!result.success) {
