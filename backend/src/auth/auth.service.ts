@@ -24,30 +24,68 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Get role from user_profiles table
+    console.log('🔐 Login attempt for user:', { 
+      userId: data.user.id, 
+      email: data.user.email 
+    });
+
+    // Get role from user_profiles table using SERVICE_ROLE_KEY (bypasses RLS)
     const { data: profile, error: profileError } = await this.supabase
       .from('user_profiles')
       .select('role, name')
       .eq('id', data.user.id)
       .single();
 
-    // If profile doesn't exist, create it
-    let userRole = profile?.role || data.user.user_metadata?.role || 'user';
-    
-    if (profileError && profileError.code === 'PGRST116') {
-      // Profile doesn't exist, create it
-      const { data: newProfile } = await this.supabase
-        .from('user_profiles')
-        .insert({
-          id: data.user.id,
-          name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User',
-          role: userRole,
-        })
-        .select()
-        .single();
-      
-      if (newProfile) {
-        userRole = newProfile.role;
+    console.log('📋 Profile fetch result:', { 
+      profile, 
+      profileError: profileError ? {
+        message: profileError.message,
+        code: profileError.code,
+        details: profileError.details
+      } : null,
+      userId: data.user.id 
+    });
+
+    let userRole = 'user';
+    let userName = data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User';
+
+    if (profile && !profileError) {
+      // Profile exists and fetched successfully
+      userRole = profile.role || 'user';
+      userName = profile.name || userName;
+      console.log('✅ Using profile role:', { role: userRole, name: userName });
+    } else if (profileError) {
+      if (profileError.code === 'PGRST116') {
+        // Profile doesn't exist, create it
+        console.log('⚠️ Profile not found, creating new profile...');
+        const defaultRole = data.user.user_metadata?.role || 'user';
+        const { data: newProfile, error: insertError } = await this.supabase
+          .from('user_profiles')
+          .insert({
+            id: data.user.id,
+            name: userName,
+            role: defaultRole,
+          })
+          .select()
+          .single();
+        
+        if (newProfile && !insertError) {
+          userRole = newProfile.role;
+          userName = newProfile.name || userName;
+          console.log('✅ Created new profile:', { role: userRole, name: userName });
+        } else {
+          console.error('❌ Failed to create profile:', insertError);
+          userRole = defaultRole;
+        }
+      } else {
+        // Other error (RLS, permissions, etc.)
+        console.error('❌ Error fetching profile:', {
+          code: profileError.code,
+          message: profileError.message,
+          details: profileError.details
+        });
+        // Try to use user_metadata as fallback
+        userRole = data.user.user_metadata?.role || 'user';
       }
     }
     
@@ -55,6 +93,12 @@ export class AuthService {
     if (userRole === 'authenticated') {
       userRole = 'user';
     }
+
+    console.log('🎯 Final role for login:', { 
+      email: data.user.email, 
+      role: userRole,
+      userId: data.user.id
+    });
 
     // Generate JWT token
     const payload = {
@@ -71,7 +115,7 @@ export class AuthService {
         id: data.user.id,
         email: data.user.email,
         role: userRole,
-        name: profile?.name || data.user.user_metadata?.name,
+        name: userName,
       },
     };
   }
@@ -159,25 +203,36 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    // Get profile directly from user_profiles table
+    console.log('🔍 getProfile called for userId:', userId);
+    
+    // Get profile directly from user_profiles table using SERVICE_ROLE_KEY
     const { data: profile, error: profileError } = await this.supabase
       .from('user_profiles')
       .select('role, name, id')
       .eq('id', userId)
       .single();
 
+    console.log('📋 getProfile result:', { 
+      profile, 
+      profileError: profileError ? {
+        message: profileError.message,
+        code: profileError.code
+      } : null
+    });
+
     if (profile && !profileError) {
-      // Get email from JWT payload if available, otherwise use empty string
-      // The email should be in the JWT token payload
-      return {
+      const result = {
         id: profile.id,
-        email: '', // Will be filled from request context if needed
+        email: '', // Will be filled from JWT payload
         role: profile.role || 'user',
         name: profile.name || 'User',
       };
+      console.log('✅ getProfile returning:', result);
+      return result;
     }
 
-    // If profile doesn't exist, return default
+    // If profile doesn't exist or error, return default
+    console.warn('⚠️ Profile not found for user:', userId);
     return {
       id: userId,
       email: '',

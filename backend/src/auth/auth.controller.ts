@@ -24,13 +24,23 @@ export class AuthController {
   @Get('profile')
   @UseGuards(JwtAuthGuard)
   async getProfile(@Request() req) {
+    console.log('📥 getProfile request:', { 
+      userId: req.user.sub, 
+      email: req.user.email, 
+      role: req.user.role,
+      fullUser: req.user
+    });
+    
     const profile = await this.authService.getProfile(req.user.sub);
-    // Add email from JWT payload if available
-    return {
+    
+    const result = {
       ...profile,
       email: req.user.email || profile.email || '',
       role: profile.role || req.user.role || 'user',
     };
+    
+    console.log('📤 getProfile response:', result);
+    return result;
   }
 }
 
