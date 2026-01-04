@@ -22,7 +22,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException();
     }
-    return { ...user, sub: payload.sub };
+    // Use email from JWT payload if user email is empty
+    return { 
+      ...user, 
+      sub: payload.sub,
+      email: user.email || payload.email || '',
+      role: user.role || payload.role || 'user',
+    };
   }
 }
 

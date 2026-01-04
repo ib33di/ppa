@@ -24,7 +24,13 @@ export class AuthController {
   @Get('profile')
   @UseGuards(JwtAuthGuard)
   async getProfile(@Request() req) {
-    return this.authService.getProfile(req.user.sub);
+    const profile = await this.authService.getProfile(req.user.sub);
+    // Add email from JWT payload if available
+    return {
+      ...profile,
+      email: req.user.email || profile.email || '',
+      role: profile.role || req.user.role || 'user',
+    };
   }
 }
 

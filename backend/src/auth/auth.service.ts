@@ -129,62 +129,61 @@ export class AuthService {
   }
 
   async validateUser(userId: string) {
-    // Get user from Supabase Auth
-    const { data: { user }, error } = await this.supabase.getClient().auth.getUser(userId);
-
-    if (error || !user) {
-      return null;
-    }
-
-    // Get role from user_profiles table
+    // Get profile from user_profiles table (most reliable source for role)
     const { data: profile, error: profileError } = await this.supabase
       .from('user_profiles')
-      .select('role, name')
+      .select('role, name, id')
       .eq('id', userId)
       .single();
 
-    // If profile doesn't exist, create it with default role
-    if (profileError && profileError.code === 'PGRST116') {
-      // Profile doesn't exist, create it
-      const defaultRole = user.user_metadata?.role || 'user';
-      await this.supabase
-        .from('user_profiles')
-        .insert({
-          id: userId,
-          name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-          role: defaultRole,
-        })
-        .select()
-        .single();
-      
+    if (profile && !profileError) {
+      // Profile exists, get email from auth.users table (public schema)
+      // Note: We can't directly query auth.users, so we'll use the profile data
+      // Email will be retrieved from JWT token payload if needed
       return {
-        id: user.id,
-        email: user.email,
-        role: defaultRole,
-        name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+        id: profile.id,
+        email: '', // Will be filled from JWT token
+        role: profile.role || 'user',
+        name: profile.name || 'User',
       };
     }
 
-    // Use profile role, fallback to user_metadata, then default to 'user'
-    const userRole = profile?.role || user.user_metadata?.role || 'user';
-    
-    // Don't use 'authenticated' as role - it's a Supabase auth status, not a user role
-    const finalRole = userRole === 'authenticated' ? 'user' : userRole;
-
+    // Profile doesn't exist - this shouldn't happen if login worked correctly
+    // Return default user
     return {
-      id: user.id,
-      email: user.email,
-      role: finalRole,
-      name: profile?.name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+      id: userId,
+      email: '',
+      role: 'user',
+      name: 'User',
     };
   }
 
   async getProfile(userId: string) {
-    const user = await this.validateUser(userId);
-    if (!user) {
-      throw new UnauthorizedException('User not found');
+    // Get profile directly from user_profiles table
+    const { data: profile, error: profileError } = await this.supabase
+      .from('user_profiles')
+      .select('role, name, id')
+      .eq('id', userId)
+      .single();
+
+    if (profile && !profileError) {
+      // Get email from JWT payload if available, otherwise use empty string
+      // The email should be in the JWT token payload
+      return {
+        id: profile.id,
+        email: '', // Will be filled from request context if needed
+        role: profile.role || 'user',
+        name: profile.name || 'User',
+      };
     }
-    return user;
+
+    // If profile doesn't exist, return default
+    return {
+      id: userId,
+      email: '',
+      role: 'user',
+      name: 'User',
+    };
   }
 }
 
