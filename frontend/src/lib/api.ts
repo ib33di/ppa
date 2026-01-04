@@ -6,6 +6,26 @@ const getAuthToken = (): string | null => {
 };
 
 export const api = {
+  async parseError(response: Response): Promise<Error> {
+    // Try to surface NestJS / HTTPException messages instead of generic statusText.
+    try {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const body: any = await response.json();
+        const msg = body?.message;
+        if (Array.isArray(msg)) return new Error(msg.join(', '));
+        if (typeof msg === 'string' && msg.trim()) return new Error(msg);
+        if (typeof body?.error === 'string' && body.error.trim()) return new Error(body.error);
+      } else {
+        const text = await response.text();
+        if (text?.trim()) return new Error(text);
+      }
+    } catch {
+      // ignore parse failures
+    }
+    return new Error(`API error: ${response.status} ${response.statusText}`);
+  },
+
   async get<T>(endpoint: string): Promise<T> {
     const token = getAuthToken();
     const headers: HeadersInit = {
@@ -28,7 +48,7 @@ export const api = {
     }
     
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await this.parseError(response);
     }
     return response.json();
   },
@@ -56,7 +76,7 @@ export const api = {
     }
     
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await this.parseError(response);
     }
     return response.json();
   },
@@ -84,7 +104,7 @@ export const api = {
     }
     
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await this.parseError(response);
     }
     return response.json();
   },
@@ -109,7 +129,7 @@ export const api = {
     }
     
     if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`);
+      throw await this.parseError(response);
     }
     return response.json();
   },
