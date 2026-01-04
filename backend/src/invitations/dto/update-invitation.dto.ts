@@ -12,5 +12,9 @@ export class UpdateInvitationDto {
   @IsOptional()
   @IsString()
   sent_at?: string;
+
+  @IsOptional()
+  @IsString()
+  responded_at?: string;
 }
 
