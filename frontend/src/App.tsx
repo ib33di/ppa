@@ -6,7 +6,6 @@ import { usePlayers } from './hooks/usePlayers';
 import { useCourts } from './hooks/useCourts';
 import { Icon } from './components/Icons';
 import { AddPlayerModal } from './components/AddPlayerModal';
-import { AddPlayerModal } from './components/AddPlayerModal';
 import { AddCourtModal } from './components/AddCourtModal';
 import { Match, SlotData } from './types';
 import { api } from './lib/api';
