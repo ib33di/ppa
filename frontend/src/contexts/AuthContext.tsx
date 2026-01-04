@@ -2,19 +2,25 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { User } from '@supabase/supabase-js';
 
+interface UserWithRole extends User {
+  role?: string;
+}
+
 interface AuthContextType {
-  user: User | null;
+  user: UserWithRole | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
   signOut: () => Promise<void>;
   token: string | null;
+  isAdmin: boolean;
+  isManager: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserWithRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
 
@@ -40,7 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser({
             id: userData.id,
             email: userData.email,
-          } as User);
+            role: userData.role || 'user',
+          } as UserWithRole);
           setLoading(false);
         })
         .catch(() => {
@@ -86,7 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser({
       id: result.user.id,
       email: result.user.email,
-    } as User);
+      role: result.user.role || 'user',
+    } as UserWithRole);
     
     // Also sign in to Supabase for Realtime subscriptions
     const { error: supabaseError } = await supabase.auth.signInWithPassword({
@@ -120,7 +128,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser({
       id: result.user.id,
       email: result.user.email,
-    } as User);
+      role: result.user.role || 'user',
+    } as UserWithRole);
     
     // Also sign up to Supabase for Realtime subscriptions
     const { error: supabaseError } = await supabase.auth.signUp({
@@ -146,8 +155,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('access_token');
   };
 
+  const isAdmin = user?.role === 'admin';
+  const isManager = user?.role === 'manager' || isAdmin;
+
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, token }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, token, isAdmin, isManager }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,30 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useMatches } from './hooks/useMatches';
 import { usePlayers } from './hooks/usePlayers';
 import { useCourts } from './hooks/useCourts';
 import { Icon } from './components/Icons';
+import { AddPlayerModal } from './components/AddPlayerModal';
+import { AddCourtModal } from './components/AddCourtModal';
 import { Match, SlotData } from './types';
 import { api } from './lib/api';
 
-type ViewState = 'overview' | 'players' | 'matchmaking' | 'analytics' | 'scheduled';
+type ViewState = 'overview' | 'players' | 'matchmaking' | 'analytics' | 'scheduled' | 'admin';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewState>('matchmaking');
   const { matches, loading: matchesLoading } = useMatches();
-  const { players, loading: playersLoading } = usePlayers();
-  const { courts, loading: courtsLoading } = useCourts();
+  const { players: playersList, loading: playersLoading, refetch: refetchPlayers } = usePlayers();
+  const { courts: courtsList, loading: courtsLoading, refetch: refetchCourts, refetchAll: refetchAllCourts } = useCourts();
   const [, setSelectedSlot] = useState<SlotData | null>(null);
   const [showCreateMatch, setShowCreateMatch] = useState(false);
-  const { user, signOut } = useAuth();
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [showAddCourt, setShowAddCourt] = useState(false);
+  const { user, signOut, isAdmin, isManager } = useAuth();
+
+  // Fetch all courts when admin view is opened
+  useEffect(() => {
+    if (currentView === 'admin' && isAdmin) {
+      refetchAllCourts();
+    }
+  }, [currentView, isAdmin]);
 
   // Convert matches to slot data for grid display
   const getSlotData = (): SlotData[] => {
     const slots: SlotData[] = [];
     const times = ['17:00', '18:30', '20:00', '21:30'];
     
-    courts.forEach(court => {
+    courtsList.forEach(court => {
       times.forEach(time => {
         const match = matches.find(m => {
           const matchTime = new Date(m.scheduled_time);
@@ -153,6 +164,16 @@ function AppContent() {
             >
               Players
             </button>
+            {isAdmin && (
+              <button
+                onClick={() => setCurrentView('admin')}
+                className={`px-1 py-4 text-sm font-medium transition-all ${
+                  currentView === 'admin' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                الإدارة
+              </button>
+            )}
           </div>
         </div>
 
@@ -162,7 +183,7 @@ function AppContent() {
             <div>
               <h2 className="text-2xl font-bold text-white mb-6">Matchmaking</h2>
               <div className="grid grid-cols-4 gap-4">
-                {courts.map(court => (
+                {courtsList.map(court => (
                   <div key={court.id} className="text-center text-xs font-bold text-zinc-500 uppercase mb-2">
                     {court.name}
                   </div>
@@ -170,7 +191,7 @@ function AppContent() {
                 {['17:00', '18:30', '20:00', '21:30'].map(time => (
                   <React.Fragment key={time}>
                     <div className="text-xs font-mono text-zinc-500">{time}</div>
-                    {courts.map(court => {
+                    {courtsList.map(court => {
                       const slot = slotData.find(s => s.time === time && s.court === court.name);
                       return (
                         <div
@@ -196,9 +217,20 @@ function AppContent() {
 
           {currentView === 'players' && (
             <div>
-              <h2 className="text-2xl font-bold text-white mb-6">Players</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white">Players</h2>
+                {isAdmin && (
+                  <button
+                    onClick={() => setShowAddPlayer(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+                  >
+                    <Icon name="plus" className="w-4 h-4" />
+                    إضافة لاعب
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {players.map(player => (
+                {playersList.map(player => (
                   <div key={player.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
                     <div className="flex items-center gap-3 mb-2">
                       <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">
@@ -215,14 +247,91 @@ function AppContent() {
               </div>
             </div>
           )}
+
+          {currentView === 'admin' && isAdmin && (
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-6">لوحة الإدارة</h2>
+              
+              {/* Courts Management */}
+              <div className="mb-8">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-white">إدارة الملاعب</h3>
+                  <button
+                    onClick={() => setShowAddCourt(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+                  >
+                    <Icon name="plus" className="w-4 h-4" />
+                    إضافة ملعب
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {courtsList.map(court => (
+                    <div key={court.id} className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-white">{court.name}</div>
+                          <div className="text-xs text-zinc-500 mt-1">
+                            {court.is_active ? 'نشط' : 'غير نشط'}
+                          </div>
+                        </div>
+                        <div className={`w-3 h-3 rounded-full ${court.is_active ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Available Times */}
+              <div>
+                <h3 className="text-xl font-bold text-white mb-4">الأوقات المتاحة</h3>
+                <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {['17:00', '18:30', '20:00', '21:30'].map(time => (
+                      <div key={time} className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 text-center">
+                        <div className="text-lg font-bold text-white">{time}</div>
+                        <div className="text-xs text-zinc-500 mt-1">متاح</div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-sm text-zinc-400 mt-4">
+                    هذه الأوقات الافتراضية لجميع الملاعب. يمكن تعديلها لاحقاً حسب الحاجة.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Modals */}
+      {showAddPlayer && (
+        <AddPlayerModal
+          onClose={() => setShowAddPlayer(false)}
+          onSuccess={() => {
+            refetchPlayers();
+            setShowAddPlayer(false);
+          }}
+        />
+      )}
+
+      {showAddCourt && (
+        <AddCourtModal
+          onClose={() => setShowAddCourt(false)}
+          onSuccess={() => {
+            refetchCourts();
+            if (currentView === 'admin') {
+              refetchAllCourts();
+            }
+            setShowAddCourt(false);
+          }}
+        />
+      )}
 
       {/* Create Match Modal */}
       {showCreateMatch && (
         <CreateMatchModal
-          courts={courts}
-          players={players}
+          courts={courtsList}
+          players={playersList}
           onClose={() => setShowCreateMatch(false)}
           onCreate={handleCreateMatch}
         />

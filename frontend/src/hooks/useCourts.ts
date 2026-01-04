@@ -29,6 +29,23 @@ export function useCourts() {
     }
   };
 
-  return { courts, loading, error, refetch: fetchCourts };
+  const fetchAllCourts = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('courts')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setCourts(data as Court[]);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { courts, loading, error, refetch: fetchCourts, refetchAll: fetchAllCourts };
 }
 
