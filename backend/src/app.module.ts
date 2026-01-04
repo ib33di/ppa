@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { AppController } from './app.controller';
 import { SupabaseModule } from './supabase/supabase.module';
 import { AuthModule } from './auth/auth.module';
 import { PlayersModule } from './players/players.module';
@@ -28,6 +29,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     WebhooksModule,
     PaymentsModule,
   ],
+  controllers: [AppController],
   providers: [
     {
       provide: APP_GUARD,
