@@ -15,6 +15,54 @@ export class WebhooksService {
     private supabase: SupabaseService,
   ) {}
 
+  private safeStringify(input: any) {
+    const seen = new WeakSet();
+    const redactNeedles = ['token', 'authorization', 'api_key', 'apikey', 'password', 'secret', 'webhook-token', 'webhook_token'];
+    return JSON.stringify(
+      input,
+      (key, value) => {
+        if (typeof value === 'object' && value !== null) {
+          if (seen.has(value)) return '[Circular]';
+          seen.add(value);
+        }
+        const lowered = (key || '').toLowerCase();
+        if (lowered && redactNeedles.some((n) => lowered.includes(n))) {
+          return value ? '***' : value;
+        }
+        return value;
+      },
+      2,
+    );
+  }
+
+  private extractButtonId(payload: any): string | null {
+    return (
+      payload?.button_id ||
+      payload?.data?.button_id ||
+      payload?.buttonId ||
+      payload?.data?.buttonId ||
+      payload?.interactive?.button_reply?.id ||
+      payload?.data?.interactive?.button_reply?.id ||
+      payload?.interactive?.id ||
+      payload?.data?.interactive?.id ||
+      payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.button?.payload ||
+      payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.interactive?.button_reply?.id ||
+      null
+    );
+  }
+
+  private mapButtonIdToDecision(buttonId: string | null): 'YES' | 'NO' | null {
+    if (!buttonId) return null;
+    if (buttonId === 'CONFIRM_YES') return 'YES';
+    if (buttonId === 'CONFIRM_NO') return 'NO';
+
+    // Backward compatibility with older button schemes previously used in this codebase.
+    const lower = buttonId.toLowerCase();
+    if (lower.startsWith('yes_') || lower.includes('yes_')) return 'YES';
+    if (lower.startsWith('no_') || lower.includes('no_')) return 'NO';
+    return null;
+  }
+
   /**
    * Handle incoming WhatsApp webhook from Ultramsg.com
    * Expected payload structure (based on Ultramsg API documentation):
@@ -38,7 +86,7 @@ export class WebhooksService {
   async handleWhatsAppWebhook(payload: any): Promise<{ success: boolean; message?: string }> {
     try {
       console.log('[Webhook] ========== INCOMING WEBHOOK ==========');
-      console.log('[Webhook] Full payload:', JSON.stringify(payload, null, 2));
+      console.log('[Webhook] Full payload (redacted):', this.safeStringify(payload));
       console.log('[Webhook] Payload keys:', Object.keys(payload || {}));
       console.log('[Webhook] Processing WhatsApp message:', {
         from: payload?.from,
@@ -107,58 +155,37 @@ export class WebhooksService {
         return { success: true, message: `Event type ${eventType} ignored` };
       }
       
-      // Extract button/interactive data if present
-      const { button_id, interactive } = payload;
-
-      // Handle interactive button responses
-      // Button responses may come as button_id or in interactive object
+      // Handle interactive/button responses with stable IDs
+      const buttonId = this.extractButtonId(payload);
+      const mappedDecision = this.mapButtonIdToDecision(buttonId);
       let messageText = message || '';
-      if (button_id) {
-        // Button was clicked - extract response from button_id
-        console.log('[Webhook] Button clicked:', button_id);
-        if (button_id.startsWith('yes_')) {
-          messageText = 'YES';
-        } else if (button_id.startsWith('no_')) {
-          messageText = 'NO';
-        }
-      } else if (interactive?.button_reply?.id) {
-        // Alternative format for button responses
-        const buttonId = interactive.button_reply.id;
-        console.log('[Webhook] Interactive button clicked:', buttonId);
-        if (buttonId.startsWith('yes_')) {
-          messageText = 'YES';
-        } else if (buttonId.startsWith('no_')) {
-          messageText = 'NO';
-        }
-      } else if (interactive?.type === 'button_reply') {
-        // Another format for button responses
-        const buttonId = interactive.button_reply?.id || interactive.id;
-        console.log('[Webhook] Button reply received:', buttonId);
-        if (buttonId && buttonId.startsWith('yes_')) {
-          messageText = 'YES';
-        } else if (buttonId && buttonId.startsWith('no_')) {
-          messageText = 'NO';
-        }
+      if (mappedDecision) {
+        messageText = mappedDecision;
       }
+
+      console.log('[Webhook] Derived decision:', {
+        buttonId,
+        mappedDecision,
+        messageText,
+      });
 
       // Final check: ensure we have either a message or button/interactive response
       if (!from) {
         console.error('[Webhook] Missing phone number (from field)');
-        console.error('[Webhook] Payload structure:', JSON.stringify(payload, null, 2));
+        console.error('[Webhook] Payload structure (redacted):', this.safeStringify(payload));
         return { success: false, message: 'Missing phone number (from field)' };
       }
 
-      if (!messageText && !button_id && !interactive) {
+      if (!messageText && !buttonId) {
         console.warn('[Webhook] Missing message content:', { 
           from, 
           originalMessage: message,
           messageText,
-          button_id,
-          interactive,
+          buttonId,
           hasFrom: !!from,
           hasMessage: !!messageText,
           payloadKeys: Object.keys(payload || {}),
-          payloadStructure: JSON.stringify(payload, null, 2),
+          payloadStructure: this.safeStringify(payload),
         });
         return { success: false, message: 'Missing message content' };
       }

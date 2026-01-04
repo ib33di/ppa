@@ -41,6 +41,73 @@ export class WhatsAppService {
     }
   }
 
+  private buildInvitationBody(params: {
+    playerName: string;
+    matchTimeLabel: string;
+    courtName: string;
+  }): string {
+    const { playerName, matchTimeLabel, courtName } = params;
+
+    // Requirements: greeting, match date/time, court name, prompt.
+    return `Hey ${playerName} 👋\n\nYou're invited to a padel match!\n\n📅 ${matchTimeLabel}\n🏟️ ${courtName}\n\nPlease confirm your attendance:`;
+  }
+
+  private async sendUltraMsgChat(to: string, body: string) {
+    const apiEndpoint = `${this.apiBaseUrl}/messages/chat`;
+    const params = new URLSearchParams({
+      token: this.apiToken,
+      to,
+      body,
+    });
+
+    const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const responseText = await response.text();
+    return { response, responseText };
+  }
+
+  /**
+   * Send interactive buttons via UltraMsg.
+   *
+   * UltraMsg has multiple "button" endpoints across plans/versions; we try a small set
+   * of known paths and payload formats to maximize compatibility.
+   */
+  private async sendUltraMsgButtons(to: string, body: string) {
+    const buttonsJson = JSON.stringify([
+      { id: 'CONFIRM_YES', text: 'YES' },
+      { id: 'CONFIRM_NO', text: 'NO' },
+    ]);
+
+    const candidatePaths = ['/messages/button', '/messages/buttons'];
+    let lastError: { status?: number; body?: string; path?: string } | null = null;
+
+    for (const path of candidatePaths) {
+      const apiEndpoint = `${this.apiBaseUrl}${path}`;
+      const params = new URLSearchParams({
+        token: this.apiToken,
+        to,
+        body,
+        buttons: buttonsJson,
+      });
+
+      const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const responseText = await response.text();
+      if (response.ok) {
+        return { ok: true as const, path, responseText };
+      }
+
+      lastError = { status: response.status, body: responseText, path };
+    }
+
+    return { ok: false as const, lastError };
+  }
+
   /**
    * Verify Ultramsg instance status
    */
@@ -182,42 +249,42 @@ export class WhatsAppService {
       const courtName = courtData?.name || 'Court';
 
       // Build invitation message
-      const messageText = `Hey ${player.name} 👋\n\nYou're invited to a padel match!\n\n📅 ${timeStr}\n🏟️ ${courtName}\n\nPlease confirm your attendance:`;
+      const messageText = this.buildInvitationBody({
+        playerName: player.name,
+        matchTimeLabel: timeStr,
+        courtName,
+      });
 
       // Format phone number for Ultramsg (should include country code without +)
       const phoneNumber = player.phone.replace(/^\+/, '').replace(/\s/g, '');
 
       console.log(`[WhatsApp] Sending message to ${phoneNumber} via Ultramsg API`);
-      console.log(`[WhatsApp] API URL: ${this.apiBaseUrl}/messages/chat`);
+      console.log(`[WhatsApp] API URL base: ${this.apiBaseUrl}`);
 
-      // Build full message with reply instructions
-      const fullMessage = `${messageText}\n\nReply YES to confirm or NO to decline.`;
+      console.log(`[WhatsApp] Sending interactive buttons via Ultramsg API...`);
 
-      // Ultramsg.com API format for sending messages
-      const apiEndpoint = `${this.apiBaseUrl}/messages/chat`;
-      const params = new URLSearchParams({
-        token: this.apiToken,
-        to: phoneNumber,
-        body: fullMessage,
-      });
+      // Prefer interactive buttons (YES/NO) with stable IDs; fallback to plain chat if not supported.
+      let responseText: string;
+      let responseStatus: number;
 
-      console.log(`[WhatsApp] Sending message via Ultramsg API...`);
-
-      // Send via Ultramsg API
-      const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const responseText = await response.text();
-      console.log(`[WhatsApp] API Response Status: ${response.status}`);
-      console.log(`[WhatsApp] API Response Body: ${responseText}`);
-
-      if (!response.ok) {
-        throw new Error(`Ultramsg API error (${response.status}): ${responseText}`);
+      const buttonsResult = await this.sendUltraMsgButtons(phoneNumber, messageText);
+      if (buttonsResult.ok) {
+        responseText = buttonsResult.responseText;
+        responseStatus = 200;
+        console.log(`[WhatsApp] Buttons message sent via ${buttonsResult.path}`);
+      } else {
+        console.warn(`[WhatsApp] Buttons message failed, falling back to plain text`, buttonsResult.lastError);
+        const fullMessage = `${messageText}\n\nTap YES/NO button in WhatsApp (or reply YES to confirm / NO to decline).`;
+        const chatResult = await this.sendUltraMsgChat(phoneNumber, fullMessage);
+        responseText = chatResult.responseText;
+        responseStatus = chatResult.response.status;
+        if (!chatResult.response.ok) {
+          throw new Error(`Ultramsg API error (${chatResult.response.status}): ${chatResult.responseText}`);
+        }
       }
+
+      console.log(`[WhatsApp] API Response Status: ${responseStatus}`);
+      console.log(`[WhatsApp] API Response Body: ${responseText}`);
 
       let result: any;
       try {
@@ -369,7 +436,14 @@ export class WhatsAppService {
       }
 
       // Check if this is a button response (starts with yes_ or no_)
-      if (message.startsWith('yes_') || message.toLowerCase().includes('yes_')) {
+      // Also support stable UltraMsg button IDs
+      if (message === 'CONFIRM_YES') {
+        console.log(`[WhatsApp] Detected button response: CONFIRM_YES`);
+        message = 'YES';
+      } else if (message === 'CONFIRM_NO') {
+        console.log(`[WhatsApp] Detected button response: CONFIRM_NO`);
+        message = 'NO';
+      } else if (message.startsWith('yes_') || message.toLowerCase().includes('yes_')) {
         console.log(`[WhatsApp] Detected button response: YES button`);
         message = 'YES';
       } else if (message.startsWith('no_') || message.toLowerCase().includes('no_')) {
