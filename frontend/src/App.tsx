@@ -6,6 +6,7 @@ import { usePlayers } from './hooks/usePlayers';
 import { useCourts } from './hooks/useCourts';
 import { Icon } from './components/Icons';
 import { AddPlayerModal } from './components/AddPlayerModal';
+import { AddPlayerModal } from './components/AddPlayerModal';
 import { AddCourtModal } from './components/AddCourtModal';
 import { Match, SlotData } from './types';
 import { api } from './lib/api';
@@ -23,7 +24,7 @@ function AppContent() {
   const [showAddCourt, setShowAddCourt] = useState(false);
   const { user, signOut, isAdmin, isManager } = useAuth();
 
-  // Debug: Log admin status
+  // Debug: Log admin status and show admin badge
   useEffect(() => {
     console.log('User role check:', { 
       email: user?.email, 
@@ -31,6 +32,21 @@ function AppContent() {
       isAdmin, 
       isManager 
     });
+    
+    // Force refresh user profile if role is missing
+    if (user && !user.role) {
+      console.warn('User role is missing, fetching profile...');
+      fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/profile`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        },
+      })
+        .then(res => res.json())
+        .then(userData => {
+          console.log('Refreshed user profile:', userData);
+        })
+        .catch(err => console.error('Failed to refresh profile:', err));
+    }
   }, [user, isAdmin, isManager]);
 
   // Fetch all courts when admin view is opened
@@ -137,7 +153,38 @@ function AppContent() {
         <header className="px-8 py-5 flex justify-between items-center bg-black border-b border-zinc-900">
           <h1 className="text-xl font-bold tracking-tight text-white">PPA Dashboard</h1>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-zinc-400">{user?.email}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-zinc-400">{user?.email}</span>
+              {user?.role && (
+                <span className={`text-xs px-2 py-1 rounded ${
+                  user.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400' :
+                  user.role === 'manager' ? 'bg-blue-500/20 text-blue-400' :
+                  'bg-zinc-500/20 text-zinc-400'
+                }`}>
+                  {user.role === 'admin' ? 'مدير' : user.role === 'manager' ? 'مدير' : 'مستخدم'}
+                </span>
+              )}
+            </div>
+            {isAdmin && (
+              <button
+                onClick={() => setShowAddPlayer(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+                title="إضافة لاعب"
+              >
+                <Icon name="plus" className="w-4 h-4" />
+                إضافة لاعب
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={() => setShowAddCourt(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
+                title="إضافة ملعب"
+              >
+                <Icon name="plus" className="w-4 h-4" />
+                إضافة ملعب
+              </button>
+            )}
             <button
               onClick={() => setShowCreateMatch(true)}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
@@ -174,16 +221,14 @@ function AppContent() {
             >
               Players
             </button>
-            {isAdmin && (
-              <button
-                onClick={() => setCurrentView('admin')}
-                className={`px-1 py-4 text-sm font-medium transition-all ${
-                  currentView === 'admin' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                الإدارة
-              </button>
-            )}
+            <button
+              onClick={() => setCurrentView('admin')}
+              className={`px-1 py-4 text-sm font-medium transition-all ${
+                currentView === 'admin' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              الإدارة {isAdmin && <span className="ml-1 text-xs">(مدير)</span>}
+            </button>
           </div>
         </div>
 
@@ -258,12 +303,26 @@ function AppContent() {
             </div>
           )}
 
-          {currentView === 'admin' && isAdmin && (
+          {currentView === 'admin' && (
             <div>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-white">لوحة الإدارة</h2>
-                <div className="text-sm text-zinc-400">
-                  {user?.email} - {user?.role === 'admin' ? 'مدير' : 'مستخدم'}
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-zinc-400">
+                    {user?.email}
+                  </div>
+                  <div className={`text-xs px-3 py-1 rounded-full font-medium ${
+                    user?.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                    user?.role === 'manager' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                    'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
+                  }`}>
+                    {user?.role === 'admin' ? 'مدير' : user?.role === 'manager' ? 'مدير' : user?.role || 'غير محدد'}
+                  </div>
+                  {!isAdmin && (
+                    <div className="text-xs text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20">
+                      صلاحيات محدودة
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -271,13 +330,15 @@ function AppContent() {
               <div className="mb-8">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-xl font-bold text-white">إدارة اللاعبين</h3>
-                  <button
-                    onClick={() => setShowAddPlayer(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
-                  >
-                    <Icon name="plus" className="w-4 h-4" />
-                    إضافة لاعب جديد
-                  </button>
+                  {(isAdmin || isManager) && (
+                    <button
+                      onClick={() => setShowAddPlayer(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+                    >
+                      <Icon name="plus" className="w-4 h-4" />
+                      إضافة لاعب جديد
+                    </button>
+                  )}
                 </div>
                 <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
                   <div className="text-sm text-zinc-400">
@@ -293,13 +354,15 @@ function AppContent() {
               <div className="mb-8">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-xl font-bold text-white">إدارة الملاعب</h3>
-                  <button
-                    onClick={() => setShowAddCourt(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
-                  >
-                    <Icon name="plus" className="w-4 h-4" />
-                    إضافة ملعب جديد
-                  </button>
+                  {(isAdmin || isManager) && (
+                    <button
+                      onClick={() => setShowAddCourt(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+                    >
+                      <Icon name="plus" className="w-4 h-4" />
+                      إضافة ملعب جديد
+                    </button>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {courtsList.map(court => (
