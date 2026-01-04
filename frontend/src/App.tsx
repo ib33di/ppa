@@ -15,7 +15,7 @@ function AppContent() {
   const { matches, loading: matchesLoading } = useMatches();
   const { players, loading: playersLoading } = usePlayers();
   const { courts, loading: courtsLoading } = useCourts();
-  const [selectedSlot, setSelectedSlot] = useState<SlotData | null>(null);
+  const [, setSelectedSlot] = useState<SlotData | null>(null);
   const [showCreateMatch, setShowCreateMatch] = useState(false);
   const { user, signOut } = useAuth();
 
@@ -71,7 +71,7 @@ function AppContent() {
       });
 
       // Create invitations
-      const invitations = await api.post('/invitations/batch', 
+      const invitations = await api.post<Array<{ id: string }>>('/invitations/batch', 
         playerIds.map(playerId => ({
           match_id: match.id,
           player_id: playerId,
