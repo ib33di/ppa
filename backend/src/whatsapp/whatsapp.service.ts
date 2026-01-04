@@ -238,6 +238,55 @@ export class WhatsAppService {
   }
 
   /**
+   * Setup webhook in AdWhats
+   */
+  async setupWebhook(webhookUrl: string, webhookToken?: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      if (!this.apiToken || this.apiToken.trim() === '') {
+        throw new Error('AdWhats API token is not configured');
+      }
+
+      const token = webhookToken || this.configService.get<string>('ADWHATS_WEBHOOK_TOKEN') || 'default-token';
+
+      console.log('[WhatsApp] Setting up webhook:', {
+        url: webhookUrl,
+        accountId: this.whatsappAccountId,
+        token: token ? '***' : 'none',
+      });
+
+      const response = await fetch(`${this.apiUrl}/webhooks/set`, {
+        method: 'POST',
+        headers: {
+          'token': this.apiToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          whatsapp_account_id: this.whatsappAccountId,
+          url: webhookUrl,
+          webhook_token: token,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`AdWhats API error: ${error}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.status !== 'success') {
+        throw new Error(result.message || 'Failed to setup webhook');
+      }
+
+      console.log('[WhatsApp] Webhook setup successful:', result);
+      return { success: true, message: 'Webhook setup successfully' };
+    } catch (error: any) {
+      console.error('[WhatsApp] Error setting up webhook:', error);
+      return { success: false, error: error.message || 'Failed to setup webhook' };
+    }
+  }
+
+  /**
    * Send payment link after confirmation
    */
   async sendPaymentLink(invitationId: string, paymentLink: string): Promise<{ success: boolean; error?: string }> {
