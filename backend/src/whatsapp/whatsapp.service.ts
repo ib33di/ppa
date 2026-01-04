@@ -320,8 +320,10 @@ export class WhatsAppService {
   }
 
   private async processPlayerResponse(player: any, isYes: boolean): Promise<{ success: boolean; action?: string }> {
+    console.log(`[WhatsApp] Processing response for player ${player.name} (${player.phone}): ${isYes ? 'YES' : 'NO'}`);
+    
     // Find pending invitation for this player
-    const { data: invitations } = await this.supabase
+    const { data: invitations, error: invitationsError } = await this.supabase
       .from('invitations')
       .select('*')
       .eq('player_id', player.id)
@@ -329,18 +331,38 @@ export class WhatsAppService {
       .order('created_at', { ascending: false })
       .limit(1);
 
+    if (invitationsError) {
+      console.error('[WhatsApp] Error fetching invitations:', invitationsError);
+      return { success: false, action: 'error' };
+    }
+
     if (!invitations || invitations.length === 0) {
+      console.warn(`[WhatsApp] No pending invitation found for player ${player.name}`);
       return { success: false, action: 'no_pending_invitation' };
     }
 
     const invitation = invitations[0];
     const newStatus = isYes ? 'confirmed' : 'declined';
 
-    // Update invitation status
-    await this.invitationsService.update(invitation.id, {
-      status: newStatus,
-    });
+    console.log(`[WhatsApp] Updating invitation ${invitation.id} to status: ${newStatus}`);
 
-    return { success: true, action: newStatus };
+    // Update invitation status with responded_at timestamp
+    try {
+      await this.invitationsService.update(invitation.id, {
+        status: newStatus,
+        responded_at: new Date().toISOString(),
+      });
+      
+      console.log(`[WhatsApp] Successfully updated invitation ${invitation.id} to ${newStatus}`);
+      
+      // Update match confirmed count
+      await this.matchesService.updateConfirmedCount(invitation.match_id);
+      console.log(`[WhatsApp] Updated confirmed count for match ${invitation.match_id}`);
+      
+      return { success: true, action: newStatus };
+    } catch (error) {
+      console.error('[WhatsApp] Error updating invitation:', error);
+      return { success: false, action: 'error' };
+    }
   }
 }

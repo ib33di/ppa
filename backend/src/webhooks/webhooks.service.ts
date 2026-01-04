@@ -42,11 +42,16 @@ export class WebhooksService {
 
       // Process incoming message (detects YES/NO)
       // Note: AdWhats sends phone number without + prefix (e.g., "966512345678")
+      console.log('[Webhook] Calling processIncomingMessage...');
       const result = await this.whatsappService.processIncomingMessage(from, message);
+      console.log('[Webhook] processIncomingMessage result:', result);
 
       if (!result.success) {
+        console.warn(`[Webhook] Processing failed: ${result.action}`);
         return { success: false, message: `Processing failed: ${result.action}` };
       }
+
+      console.log(`[Webhook] Successfully processed message. Action: ${result.action}`);
 
       // If confirmed, create payment link
       if (result.action === 'confirmed') {

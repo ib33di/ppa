@@ -28,8 +28,8 @@ export function useMatches() {
         
         await fetchMatches();
 
-        // Subscribe to real-time updates
-        const subscription = supabase
+        // Subscribe to real-time updates for matches
+        const matchesSubscription = supabase
           .channel('matches-changes')
           .on(
             'postgres_changes',
@@ -39,13 +39,32 @@ export function useMatches() {
               table: 'matches',
             },
             () => {
+              console.log('[Realtime] Match updated, refetching...');
+              fetchMatches();
+            }
+          )
+          .subscribe();
+
+        // Subscribe to real-time updates for invitations
+        const invitationsSubscription = supabase
+          .channel('invitations-changes')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'invitations',
+            },
+            () => {
+              console.log('[Realtime] Invitation updated, refetching matches...');
               fetchMatches();
             }
           )
           .subscribe();
 
         return () => {
-          subscription.unsubscribe();
+          matchesSubscription.unsubscribe();
+          invitationsSubscription.unsubscribe();
         };
       } catch (err) {
         console.error('Error initializing matches:', err);
