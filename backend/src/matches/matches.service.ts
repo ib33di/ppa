@@ -163,12 +163,14 @@ export class MatchesService {
     return this.insertMatch(createMatchDto);
   }
 
-  async createFromSlot(createMatchDto: CreateMatchDto, slotTimeHHMM?: string) {
+  async createFromSlot(createMatchDto: CreateMatchDto & { slot_time?: string }, slotTimeHHMM?: string) {
     const hhmm = slotTimeHHMM || this.deriveTimeHHMMFromIso(createMatchDto.scheduled_time);
     await this.assertCourtAllowsTime(createMatchDto.court_id, hhmm);
     await this.assertNoDuplicateSlot(createMatchDto.court_id, createMatchDto.scheduled_time);
     // Do not re-derive time from ISO again (timezone-safe). Insert after validation.
-    return this.insertMatch(createMatchDto);
+    // Extract only fields that belong to CreateMatchDto (exclude slot_time)
+    const { slot_time, ...matchData } = createMatchDto;
+    return this.insertMatch(matchData);
   }
 
   private async insertMatch(createMatchDto: CreateMatchDto) {
