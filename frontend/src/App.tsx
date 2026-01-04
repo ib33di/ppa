@@ -426,7 +426,6 @@ function AppContent() {
 
           {currentView === 'admin' && (
             <div className="flex-1 overflow-y-auto p-8">
-            <div>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-white">Admin Panel</h2>
                 <div className="flex items-center gap-3">
