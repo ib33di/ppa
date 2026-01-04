@@ -8,13 +8,16 @@ import { Icon } from './components/Icons';
 import { AddPlayerModal } from './components/AddPlayerModal';
 import { AddCourtModal } from './components/AddCourtModal';
 import { LiveMatchesPanel } from './components/LiveMatchesPanel';
+import { OperatorFocusPanel } from './components/OperatorFocusPanel';
+import { LiveCourtStatusGrid } from './components/LiveCourtStatusGrid';
+import { CourtDetailsPanel } from './components/CourtDetailsPanel';
 import { Match, SlotData } from './types';
 import { api } from './lib/api';
 
-type ViewState = 'overview' | 'players' | 'matchmaking' | 'analytics' | 'scheduled' | 'admin';
+type ViewState = 'live' | 'players' | 'matchmaking' | 'analytics' | 'scheduled' | 'admin';
 
 function AppContent() {
-  const [currentView, setCurrentView] = useState<ViewState>('matchmaking');
+  const [currentView, setCurrentView] = useState<ViewState>('live');
   const { matches, loading: matchesLoading } = useMatches();
   const { players: playersList, loading: playersLoading, refetch: refetchPlayers } = usePlayers();
   const { courts: courtsList, loading: courtsLoading, refetch: refetchCourts, refetchAll: refetchAllCourts } = useCourts();
@@ -22,6 +25,7 @@ function AppContent() {
   const [showCreateMatch, setShowCreateMatch] = useState(false);
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [showAddCourt, setShowAddCourt] = useState(false);
+  const [selectedCourtSlot, setSelectedCourtSlot] = useState<{ courtId: string; time: string } | null>(null);
   const { user, signOut, isAdmin, isManager } = useAuth();
 
   // Debug: Log admin status and show admin badge
@@ -229,12 +233,20 @@ function AppContent() {
         <div className="px-8 border-b border-zinc-800 bg-black/50">
           <div className="flex items-center gap-8">
             <button
-              onClick={() => setCurrentView('matchmaking')}
+              onClick={() => setCurrentView('live')}
               className={`px-1 py-4 text-sm font-medium transition-all ${
-                currentView === 'matchmaking' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
+                currentView === 'live' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              Matchmaking
+              Live Operations
+            </button>
+            <button
+              onClick={() => setCurrentView('analytics')}
+              className={`px-1 py-4 text-sm font-medium transition-all ${
+                currentView === 'analytics' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Analytics
             </button>
             <button
               onClick={() => setCurrentView('players')}
@@ -245,20 +257,84 @@ function AppContent() {
               Players
             </button>
             <button
-              onClick={() => setCurrentView('admin')}
+              onClick={() => setCurrentView('matchmaking')}
               className={`px-1 py-4 text-sm font-medium transition-all ${
-                currentView === 'admin' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
+                currentView === 'matchmaking' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              Admin {isAdmin && <span className="ml-1 text-xs">(Admin)</span>}
+              Matchmaking
             </button>
+            <button
+              onClick={() => setCurrentView('scheduled')}
+              className={`px-1 py-4 text-sm font-medium transition-all ${
+                currentView === 'scheduled' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Scheduled
+            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setCurrentView('admin')}
+                className={`px-1 py-4 text-sm font-medium transition-all ${
+                  currentView === 'admin' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Admin
+              </button>
+            )}
           </div>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-hidden flex">
+          {currentView === 'live' && (
+            <>
+              {/* Left Sidebar - Operator Focus */}
+              <OperatorFocusPanel 
+                matches={matches}
+                onCourtSelect={(courtId, time) => {
+                  setSelectedCourtSlot({ courtId, time });
+                }}
+              />
+              
+              {/* Center - Live Court Status Grid */}
+              <LiveCourtStatusGrid
+                matches={matches}
+                courts={courtsList}
+                selectedSlot={selectedCourtSlot}
+                onSlotClick={(courtId, time, match) => {
+                  setSelectedCourtSlot({ courtId, time });
+                }}
+              />
+              
+              {/* Right Sidebar - Court Details */}
+              {selectedCourtSlot && (() => {
+                const selectedMatch = matches.find(m => {
+                  if (m.court_id !== selectedCourtSlot.courtId) return false;
+                  const matchTime = new Date(m.scheduled_time);
+                  const timeStr = matchTime.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: false 
+                  });
+                  return timeStr === selectedCourtSlot.time;
+                });
+                const court = courtsList.find(c => c.id === selectedCourtSlot.courtId);
+                
+                return (
+                  <CourtDetailsPanel
+                    match={selectedMatch || null}
+                    courtName={court?.name || 'Court'}
+                    time={selectedCourtSlot.time}
+                    onClose={() => setSelectedCourtSlot(null)}
+                  />
+                );
+              })()}
+            </>
+          )}
+          
           {currentView === 'matchmaking' && (
-            <div>
+            <div className="flex-1 overflow-y-auto p-8">
               <h2 className="text-2xl font-bold text-white mb-6">Matchmaking</h2>
               
               {/* Live Matches Panel */}
@@ -302,7 +378,7 @@ function AppContent() {
           )}
 
           {currentView === 'players' && (
-            <div>
+            <div className="flex-1 overflow-y-auto p-8">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-white">Players</h2>
                 {isAdmin && (
@@ -334,7 +410,22 @@ function AppContent() {
             </div>
           )}
 
+          {currentView === 'analytics' && (
+            <div className="flex-1 overflow-y-auto p-8">
+              <h2 className="text-2xl font-bold text-white mb-6">Analytics</h2>
+              <div className="text-zinc-400">Analytics dashboard coming soon...</div>
+            </div>
+          )}
+
+          {currentView === 'scheduled' && (
+            <div className="flex-1 overflow-y-auto p-8">
+              <h2 className="text-2xl font-bold text-white mb-6">Scheduled Matches</h2>
+              <LiveMatchesPanel matches={matches} />
+            </div>
+          )}
+
           {currentView === 'admin' && (
+            <div className="flex-1 overflow-y-auto p-8">
             <div>
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold text-white">Admin Panel</h2>

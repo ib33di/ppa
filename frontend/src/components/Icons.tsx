@@ -46,7 +46,8 @@ import {
   Check,
   MessageCircle,
   Radio,
-  Lock
+  Lock,
+  Info
 } from 'lucide-react';
 
 export const Icon = ({ name, className }: { name: string; className?: string }) => {
@@ -99,6 +100,8 @@ export const Icon = ({ name, className }: { name: string; className?: string }) 
     case 'message-circle': return <MessageCircle className={className} />;
     case 'radio': return <Radio className={className} />;
     case 'lock': return <Lock className={className} />;
+    case 'info': return <Info className={className} />;
+    case 'alert-triangle': return <AlertTriangle className={className} />;
     default: return <Activity className={className} />;
   }
 };
