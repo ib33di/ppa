@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { User } from '@supabase/supabase-js';
 
-interface UserWithRole extends User {
+interface UserWithRole {
+  id: string;
+  email: string;
   role?: string;
+  name?: string;
 }
 
 interface AuthContextType {
