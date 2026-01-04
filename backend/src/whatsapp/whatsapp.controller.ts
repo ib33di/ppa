@@ -40,7 +40,7 @@ export class WhatsAppController {
   async setupWebhook(@Body() body: { webhookUrl?: string; webhookToken?: string }) {
     try {
       const webhookUrl = body.webhookUrl || process.env.WEBHOOK_URL || 'https://ppa-backend-tfjj.onrender.com/webhooks/whatsapp';
-      const webhookToken = body.webhookToken || process.env.ADWHATS_WEBHOOK_TOKEN;
+      const webhookToken = body.webhookToken || process.env.ULTRAMSG_WEBHOOK_TOKEN;
       
       if (!webhookUrl) {
         throw new HttpException(

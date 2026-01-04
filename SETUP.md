@@ -9,8 +9,9 @@
 - [ ] Frontend .env configured with Supabase anon key
 - [ ] Frontend dependencies installed (`npm install` in frontend/)
 - [ ] Frontend running (`npm run dev`)
-- [ ] AdWhats API token obtained
-- [ ] AdWhats webhook configured (use ngrok for local dev)
+- [ ] Ultramsg.com account created and Instance ID obtained
+- [ ] Ultramsg token obtained
+- [ ] Ultramsg webhook configured (use ngrok for local dev)
 
 ## Step-by-Step Setup
 
@@ -46,10 +47,10 @@ npm install
 cat > .env << EOF
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
-ADWHATS_API_TOKEN=your_adwhats_token_here
-ADWHATS_API_URL=https://api.adwhats.net
-ADWHATS_ACCOUNT_ID=1
-ADWHATS_WEBHOOK_TOKEN=your_webhook_token_here
+ULTRAMSG_TOKEN=your_ultramsg_token_here
+ULTRAMSG_INSTANCE_ID=your_ultramsg_instance_id_here
+ULTRAMSG_API_URL=https://api.ultramsg.com
+ULTRAMSG_WEBHOOK_TOKEN=your_webhook_token_here
 PORT=3000
 NODE_ENV=development
 EOF
@@ -83,21 +84,28 @@ npm run dev
 
 Open http://localhost:5173 in your browser.
 
-### 5. AdWhats Integration
+### 5. Ultramsg.com Integration
 
-1. Sign up at AdWhats (or your WhatsApp API provider)
-2. Get your API token
-3. Add token to backend `.env`:
+1. Sign up at [ultramsg.com](https://ultramsg.com)
+2. Create a new Instance
+3. Get your credentials:
+   - **Instance ID**: From Instance page
+   - **Token**: From Instance > API settings
+4. Add credentials to backend `.env`:
    ```
-   ADWHATS_API_TOKEN=your_token_here
+   ULTRAMSG_TOKEN=your_token_here
+   ULTRAMSG_INSTANCE_ID=your_instance_id_here
    ```
 
-4. Configure webhook in AdWhats dashboard:
-   - For production: `https://your-domain.com/webhooks/whatsapp`
-   - For local dev: Use ngrok:
-     ```bash
-     ngrok http 3000
-     # Use the https URL from ngrok output
+5. Configure webhook in Ultramsg dashboard:
+   - Go to Settings > Webhook
+   - Enable "Webhook on Received"
+   - Set webhook URL:
+     - For production: `https://your-domain.com/webhooks/whatsapp`
+     - For local dev: Use ngrok:
+       ```bash
+       ngrok http 3000
+       # Use the https URL from ngrok output
      ```
 
 ### 6. Seed Initial Data (Optional)
@@ -166,7 +174,7 @@ curl -X POST http://localhost:3000/players \
 
 ### Webhook not receiving messages
 - Check ngrok is running (for local dev)
-- Verify webhook URL in AdWhats dashboard
+- Verify webhook URL in Ultramsg dashboard
 - Check backend logs for incoming requests
 - Adjust payload structure in webhook controller if needed
 

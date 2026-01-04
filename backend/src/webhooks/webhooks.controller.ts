@@ -11,7 +11,7 @@ export class WebhooksController {
   @HttpCode(HttpStatus.OK)
   async verifyWebhook() {
     // Health check endpoint for webhook verification
-    // AdWhats may send GET request to verify webhook is accessible
+    // Ultramsg may send GET request to verify webhook is accessible
     return { 
       success: true, 
       message: 'Webhook endpoint is active',
@@ -34,10 +34,24 @@ export class WebhooksController {
     });
     console.log('[Webhook] Full payload JSON:', JSON.stringify(payload, null, 2));
     console.log('[Webhook] Headers:', JSON.stringify(headers, null, 2));
+    
+    // Log specific message fields for debugging
+    if (payload) {
+      console.log('[Webhook] Message field analysis:', {
+        'payload.message': payload.message,
+        'payload.text': payload.text,
+        'payload.body': payload.body,
+        'payload.content': payload.content,
+        'payload.from': payload.from,
+        'payload.phone': payload.phone,
+        'payload.button_id': payload.button_id,
+        'payload.interactive': payload.interactive,
+      });
+    }
 
-    // Verify webhook token (AdWhats sends webhook-token header)
+    // Verify webhook token (Ultramsg may send webhook-token header)
     const webhookToken = headers['webhook-token'] || headers['webhook_token'] || headers['Webhook-Token'];
-    const expectedToken = process.env.ADWHATS_WEBHOOK_TOKEN;
+    const expectedToken = process.env.ULTRAMSG_WEBHOOK_TOKEN;
     
     console.log('[Webhook] Token verification:', {
       receivedToken: webhookToken ? '***' : 'none',

@@ -8,8 +8,7 @@ import { SupabaseService } from '../supabase/supabase.service';
 @Injectable()
 export class WhatsAppService {
   private apiToken: string;
-  private apiUrl: string;
-  private whatsappAccountId: number;
+  private apiBaseUrl: string; // Base URL with instance ID included (e.g., https://api.ultramsg.com/instance157813)
 
   constructor(
     private configService: ConfigService,
@@ -18,104 +17,104 @@ export class WhatsAppService {
     private matchesService: MatchesService,
     private supabase: SupabaseService,
   ) {
-    this.apiToken = this.configService.get<string>('ADWHATS_API_TOKEN') || '';
-    this.apiUrl = this.configService.get<string>('ADWHATS_API_URL') || 'https://api.adwhats.net';
-    this.whatsappAccountId = parseInt(this.configService.get<string>('ADWHATS_ACCOUNT_ID') || '1');
-  }
-
-  /**
-   * Get WhatsApp accounts (to verify account ID)
-   */
-  async getAccounts(): Promise<any> {
-    try {
-      if (!this.apiToken || this.apiToken.trim() === '') {
-        throw new Error('AdWhats API token is not configured');
+    // Ultramsg.com configuration
+    this.apiToken = this.configService.get<string>('ULTRAMSG_TOKEN') || '';
+    
+    // Get base URL (should include instance ID, e.g., https://api.ultramsg.com/instance157813)
+    let apiUrl = this.configService.get<string>('ULTRAMSG_API_URL') || '';
+    
+    // Remove trailing slash if present for consistency
+    if (apiUrl.endsWith('/')) {
+      apiUrl = apiUrl.slice(0, -1);
+    }
+    
+    // If URL doesn't include instance, try to get it from instance ID
+    if (!apiUrl || apiUrl === 'https://api.ultramsg.com') {
+      const instanceId = this.configService.get<string>('ULTRAMSG_INSTANCE_ID') || '';
+      if (instanceId) {
+        this.apiBaseUrl = `https://api.ultramsg.com/${instanceId}`;
+      } else {
+        this.apiBaseUrl = 'https://api.ultramsg.com';
       }
-
-      const response = await fetch(`${this.apiUrl}/accounts`, {
-        method: 'GET',
-        headers: {
-          'token': this.apiToken,
-        },
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`AdWhats API error: ${error}`);
-      }
-
-      const result = await response.json();
-      return result;
-    } catch (error) {
-      console.error('[WhatsApp] Error fetching WhatsApp accounts:', error);
-      throw error;
+    } else {
+      this.apiBaseUrl = apiUrl;
     }
   }
 
   /**
-   * Verify API token and account permissions
+   * Verify Ultramsg instance status
    */
-  async verifyAccount(): Promise<{ valid: boolean; error?: string; accounts?: any[] }> {
+  async verifyAccount(): Promise<{ valid: boolean; error?: string }> {
     try {
-      const accountsResult = await this.getAccounts();
-      
-      if (accountsResult.status !== 'success') {
+      if (!this.apiToken || this.apiToken.trim() === '') {
         return { 
           valid: false, 
-          error: accountsResult.message || 'Failed to verify account' 
+          error: 'Ultramsg token is not configured. Please set ULTRAMSG_TOKEN in environment variables.' 
         };
       }
 
-      const accounts = accountsResult.data?.records || [];
-      
-      // Check if the configured account ID exists
-      const accountExists = accounts.some((acc: any) => acc.id === this.whatsappAccountId);
-      
-      if (!accountExists) {
+      if (!this.apiBaseUrl || this.apiBaseUrl === 'https://api.ultramsg.com') {
         return { 
           valid: false, 
-          error: `Account ID ${this.whatsappAccountId} not found. Available accounts: ${accounts.map((a: any) => a.id).join(', ')}`,
-          accounts 
+          error: 'Ultramsg API URL is not configured. Please set ULTRAMSG_API_URL with instance ID (e.g., https://api.ultramsg.com/instance157813).' 
         };
       }
 
-      // Check if account is ready
-      const account = accounts.find((acc: any) => acc.id === this.whatsappAccountId);
-      if (!account.ready) {
+      // Check instance status via Ultramsg API
+      const response = await fetch(`${this.apiBaseUrl}/instance/status?token=${this.apiToken}`, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
         return { 
           valid: false, 
-          error: `Account ID ${this.whatsappAccountId} is not ready. Please check your AdWhats dashboard.`,
-          accounts 
+          error: `Ultramsg API error: ${error}` 
         };
       }
 
-      return { valid: true, accounts };
+      const result = await response.json();
+      
+      // Ultramsg returns status in different formats, check for success indicators
+      if (result.status === 'connected' || result.connected === true || result.instance?.status === 'open') {
+        return { valid: true };
+      }
+
+      return { 
+        valid: false, 
+        error: `Instance is not connected. Status: ${JSON.stringify(result)}` 
+      };
     } catch (error: any) {
       return { 
         valid: false, 
-        error: error.message || 'Failed to verify account permissions' 
+        error: error.message || 'Failed to verify Ultramsg instance' 
       };
     }
   }
 
   /**
-   * Send match invitation via WhatsApp
+   * Send match invitation via WhatsApp using Ultramsg.com
    */
   async sendInvitation(invitationId: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
       // Check if API token is configured
       if (!this.apiToken || this.apiToken.trim() === '') {
         console.error('[WhatsApp] API token is not configured');
-        throw new Error('WhatsApp API token is not configured. Please set ADWHATS_API_TOKEN in environment variables.');
+        throw new Error('WhatsApp API token is not configured. Please set ULTRAMSG_TOKEN in environment variables.');
+      }
+
+      if (!this.apiBaseUrl || this.apiBaseUrl === 'https://api.ultramsg.com') {
+        console.error('[WhatsApp] API URL is not configured');
+        throw new Error('Ultramsg API URL is not configured. Please set ULTRAMSG_API_URL with instance ID (e.g., https://api.ultramsg.com/instance157813).');
       }
 
       console.log(`[WhatsApp] Sending invitation for invitationId: ${invitationId}`);
 
-      // Verify account permissions before sending
+      // Verify instance status before sending
       const verification = await this.verifyAccount();
       if (!verification.valid) {
-        console.error(`[WhatsApp] Account verification failed: ${verification.error}`);
-        throw new Error(`Account verification failed: ${verification.error}. Please check your AdWhats API token and account ID.`);
+        console.error(`[WhatsApp] Instance verification failed: ${verification.error}`);
+        throw new Error(`Instance verification failed: ${verification.error}. Please check your Ultramsg token and API URL.`);
       }
 
       // Get invitation with match and player details
@@ -170,178 +169,53 @@ export class WhatsAppService {
       // Build invitation message
       const messageText = `Hey ${player.name} 👋\n\nYou're invited to a padel match!\n\n📅 ${timeStr}\n🏟️ ${courtName}\n\nPlease confirm your attendance:`;
 
-      // Format phone number (remove + and ensure proper format)
+      // Format phone number for Ultramsg (should include country code without +)
       const phoneNumber = player.phone.replace(/^\+/, '').replace(/\s/g, '');
 
-      console.log(`[WhatsApp] Sending interactive message to ${phoneNumber} via AdWhats API`);
-      console.log(`[WhatsApp] API URL: ${this.apiUrl}/messages/send`);
-      console.log(`[WhatsApp] Account ID: ${this.whatsappAccountId}`);
+      console.log(`[WhatsApp] Sending message to ${phoneNumber} via Ultramsg API`);
+      console.log(`[WhatsApp] API URL: ${this.apiBaseUrl}/messages/chat`);
 
-      // Try to send with interactive buttons (WhatsApp Business API format)
-      // If AdWhats doesn't support this format, fallback to text message
-      const payload: any = {
-        whatsapp_account_id: this.whatsappAccountId,
+      // Build full message with reply instructions
+      const fullMessage = `${messageText}\n\nReply YES to confirm or NO to decline.`;
+
+      // Ultramsg.com API format for sending messages
+      const apiEndpoint = `${this.apiBaseUrl}/messages/chat`;
+      const params = new URLSearchParams({
+        token: this.apiToken,
         to: phoneNumber,
-      };
+        body: fullMessage,
+      });
 
-      // Try interactive message format first (WhatsApp Business API format)
-      // If AdWhats doesn't support this, we'll fallback to text message
-      let useInteractive = true;
-      let payloadToSend: any = {
-        whatsapp_account_id: this.whatsappAccountId,
-        to: phoneNumber,
-      };
+      console.log(`[WhatsApp] Sending message via Ultramsg API...`);
 
-      // Try interactive buttons format
-      if (useInteractive) {
-        try {
-          // WhatsApp Business API interactive message format
-          payloadToSend.type = 'interactive';
-          payloadToSend.interactive = {
-            type: 'button',
-            body: {
-              text: messageText,
-            },
-            action: {
-              buttons: [
-                {
-                  type: 'reply',
-                  reply: {
-                    id: 'yes_' + invitationId,
-                    title: '✅ YES',
-                  },
-                },
-                {
-                  type: 'reply',
-                  reply: {
-                    id: 'no_' + invitationId,
-                    title: '❌ NO',
-                  },
-                },
-              ],
-            },
-          };
+      // Send via Ultramsg API
+      const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-          console.log('[WhatsApp] Attempting to send interactive message with buttons');
-        } catch (error) {
-          console.warn('[WhatsApp] Error creating interactive payload, falling back to text:', error);
-          useInteractive = false;
-        }
+      const responseText = await response.text();
+      console.log(`[WhatsApp] API Response Status: ${response.status}`);
+      console.log(`[WhatsApp] API Response Body: ${responseText}`);
+
+      if (!response.ok) {
+        throw new Error(`Ultramsg API error (${response.status}): ${responseText}`);
       }
 
-      // If not using interactive, use simple text message
-      if (!useInteractive) {
-        payloadToSend.message = `${messageText}\n\nReply YES to confirm or NO to decline.`;
-      }
-
-      // Send via AdWhats API
-      let response: Response;
-      let responseText: string;
       let result: any;
-
       try {
-        response = await fetch(`${this.apiUrl}/messages/send`, {
-          method: 'POST',
-          headers: {
-            'token': this.apiToken,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payloadToSend),
-        });
-
-        responseText = await response.text();
-        console.log(`[WhatsApp] API Response Status: ${response.status}`);
-        console.log(`[WhatsApp] API Response Body: ${responseText}`);
-
-        if (!response.ok) {
-          throw new Error(`AdWhats API error (${response.status}): ${responseText}`);
-        }
-
-        try {
-          result = JSON.parse(responseText);
-        } catch (parseError) {
-          throw new Error(`AdWhats API returned invalid JSON: ${responseText}`);
-        }
-        
-        // If interactive message failed, try fallback to text message
-        if (result.status !== 'success' && useInteractive) {
-          const errorMsg = result.message || result.error || 'Unknown error';
-          console.warn(`[WhatsApp] Interactive message failed: ${errorMsg}, trying text message fallback`);
-          
-          // Fallback to text message
-          payloadToSend = {
-            whatsapp_account_id: this.whatsappAccountId,
-            to: phoneNumber,
-            message: `${messageText}\n\nReply YES to confirm or NO to decline.`,
-          };
-
-          response = await fetch(`${this.apiUrl}/messages/send`, {
-            method: 'POST',
-            headers: {
-              'token': this.apiToken,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payloadToSend),
-          });
-
-          responseText = await response.text();
-          console.log(`[WhatsApp] Fallback API Response Status: ${response.status}`);
-          console.log(`[WhatsApp] Fallback API Response Body: ${responseText}`);
-
-          if (!response.ok) {
-            throw new Error(`AdWhats API error (${response.status}): ${responseText}`);
-          }
-
-          result = JSON.parse(responseText);
-        }
-        
-        // AdWhats API returns { status: "success" } on success
-        if (result.status !== 'success') {
-          const errorMsg = result.message || result.error || 'Unknown error';
-          console.error(`[WhatsApp] API returned error: ${errorMsg}`);
-          
-          // Provide helpful error messages for common issues
-          let helpfulError = errorMsg;
-          if (errorMsg.includes('permissions') || errorMsg.includes('permission')) {
-            helpfulError = `${errorMsg}. Please verify: 1) Your API token is valid and has send message permissions, 2) Account ID ${this.whatsappAccountId} exists and is active, 3) Your AdWhats account has the required permissions.`;
-          }
-          
-          throw new Error(`AdWhats API returned error: ${helpfulError}`);
-        }
-      } catch (error: any) {
-        // If error and we were trying interactive, fallback to text
-        if (useInteractive && error.message && !error.message.includes('fallback')) {
-          console.warn('[WhatsApp] Interactive message failed, trying text fallback:', error.message);
-          try {
-            payloadToSend = {
-              whatsapp_account_id: this.whatsappAccountId,
-              to: phoneNumber,
-              message: `${messageText}\n\nReply YES to confirm or NO to decline.`,
-            };
-
-            response = await fetch(`${this.apiUrl}/messages/send`, {
-              method: 'POST',
-              headers: {
-                'token': this.apiToken,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(payloadToSend),
-            });
-
-            responseText = await response.text();
-            result = JSON.parse(responseText);
-            
-            if (result.status === 'success') {
-              console.log('[WhatsApp] Fallback text message sent successfully');
-            } else {
-              throw error; // Re-throw original error
-            }
-          } catch (fallbackError) {
-            throw error; // Re-throw original error
-          }
-        } else {
-          throw error;
-        }
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        throw new Error(`Ultramsg API returned invalid JSON: ${responseText}`);
+      }
+      
+      // Ultramsg returns different response formats, check for success
+      if (result.sent === false || (result.error && result.error !== '')) {
+        const errorMsg = result.error || result.message || 'Unknown error';
+        console.error(`[WhatsApp] API returned error: ${errorMsg}`);
+        throw new Error(`Ultramsg API returned error: ${errorMsg}`);
       }
 
       console.log(`[WhatsApp] Message sent successfully to ${player.name}`);
@@ -352,7 +226,9 @@ export class WhatsAppService {
         sent_at: new Date().toISOString(),
       });
 
-      return { success: true, messageId: result.message_id || result.id };
+      // Extract message ID from response (Ultramsg may return it in different fields)
+      const messageId = result.id || result.messageId || result.message_id || result.msgid;
+      return { success: true, messageId };
     } catch (error) {
       console.error('[WhatsApp] Error sending invitation:', error);
       console.error('[WhatsApp] Error stack:', error.stack);
@@ -361,51 +237,51 @@ export class WhatsAppService {
   }
 
   /**
-   * Setup webhook in AdWhats
+   * Setup webhook in Ultramsg
+   * Note: Ultramsg webhook setup is done via their dashboard, but this method provides instructions
    */
   async setupWebhook(webhookUrl: string, webhookToken?: string): Promise<{ success: boolean; message?: string; error?: string }> {
     try {
-      if (!this.apiToken || this.apiToken.trim() === '') {
-        throw new Error('AdWhats API token is not configured');
+      if (!this.apiBaseUrl || this.apiBaseUrl === 'https://api.ultramsg.com') {
+        throw new Error('Ultramsg API URL is not configured');
       }
 
-      const token = webhookToken || this.configService.get<string>('ADWHATS_WEBHOOK_TOKEN') || 'default-token';
-
-      console.log('[WhatsApp] Setting up webhook:', {
+      console.log('[WhatsApp] Webhook setup instructions:', {
         url: webhookUrl,
-        accountId: this.whatsappAccountId,
-        token: token ? '***' : 'none',
+        apiBaseUrl: this.apiBaseUrl,
+        instructions: 'Please configure webhook in Ultramsg dashboard: Settings > Webhook > Webhook on Received',
       });
 
-      const response = await fetch(`${this.apiUrl}/webhooks/set`, {
-        method: 'POST',
-        headers: {
-          'token': this.apiToken,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          whatsapp_account_id: this.whatsappAccountId,
-          url: webhookUrl,
-          webhook_token: token,
-        }),
+      // Ultramsg webhook setup is typically done via dashboard
+      // But we can try to set it via API if they support it
+      const apiEndpoint = `${this.apiBaseUrl}/instance/webhook`;
+      const params = new URLSearchParams({
+        token: this.apiToken,
+        webhook: webhookUrl,
       });
 
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`AdWhats API error: ${error}`);
+      try {
+        const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
+          method: 'POST',
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('[WhatsApp] Webhook setup successful via API:', result);
+          return { success: true, message: 'Webhook setup successfully via API' };
+        }
+      } catch (apiError) {
+        console.warn('[WhatsApp] API webhook setup failed, use dashboard instead:', apiError);
       }
 
-      const result = await response.json();
-      
-      if (result.status !== 'success') {
-        throw new Error(result.message || 'Failed to setup webhook');
-      }
-
-      console.log('[WhatsApp] Webhook setup successful:', result);
-      return { success: true, message: 'Webhook setup successfully' };
+      // If API setup fails, return instructions
+      return { 
+        success: true, 
+        message: `Please configure webhook in Ultramsg dashboard:\n1. Go to Settings > Webhook\n2. Enable "Webhook on Received"\n3. Set webhook URL to: ${webhookUrl}` 
+      };
     } catch (error: any) {
       console.error('[WhatsApp] Error setting up webhook:', error);
-      return { success: false, error: error.message || 'Failed to setup webhook' };
+      return { success: false, error: error.message || 'Failed to setup webhook. Please configure it in Ultramsg dashboard.' };
     }
   }
 
@@ -422,30 +298,32 @@ export class WhatsAppService {
       const player = invitation.player;
       const message = `Great! Your seat is confirmed. Please complete payment:\n\n${paymentLink}\n\nThank you! 🎾`;
 
-      // Format phone number
+      // Format phone number for Ultramsg
       const phoneNumber = player.phone.replace(/^\+/, '').replace(/\s/g, '');
 
-      const response = await fetch(`${this.apiUrl}/messages/send`, {
+      // Ultramsg.com API format for sending messages
+      const apiEndpoint = `${this.apiBaseUrl}/messages/chat`;
+      const params = new URLSearchParams({
+        token: this.apiToken,
+        to: phoneNumber,
+        body: message,
+      });
+
+      const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
         method: 'POST',
         headers: {
-          'token': this.apiToken,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          whatsapp_account_id: this.whatsappAccountId,
-          to: phoneNumber,
-          message: message,
-        }),
       });
 
       if (!response.ok) {
         const error = await response.text();
-        throw new Error(`AdWhats API error: ${error}`);
+        throw new Error(`Ultramsg API error: ${error}`);
       }
 
       const result = await response.json();
-      if (result.status !== 'success') {
-        throw new Error(`AdWhats API returned error: ${result.message || 'Unknown error'}`);
+      if (result.sent === false || (result.error && result.error !== '')) {
+        throw new Error(`Ultramsg API returned error: ${result.error || result.message || 'Unknown error'}`);
       }
 
       return { success: true };
@@ -463,9 +341,16 @@ export class WhatsAppService {
       console.log(`[WhatsApp] Processing incoming message:`, {
         phone,
         message,
-        messageLength: message.length,
+        messageType: typeof message,
+        messageLength: message?.length || 0,
         timestamp: new Date().toISOString(),
       });
+
+      // Handle undefined/null/empty message
+      if (!message || typeof message !== 'string') {
+        console.warn(`[WhatsApp] Invalid message received:`, { phone, message, messageType: typeof message });
+        return { success: false, action: 'invalid_message' };
+      }
 
       // Check if this is a button response (starts with yes_ or no_)
       if (message.startsWith('yes_') || message.toLowerCase().includes('yes_')) {
@@ -477,7 +362,7 @@ export class WhatsAppService {
       }
 
       // Normalize message - remove extra whitespace and convert to uppercase
-      const normalizedMessage = message.trim().replace(/\s+/g, ' ').toUpperCase();
+      const normalizedMessage = (message || '').trim().replace(/\s+/g, ' ').toUpperCase();
       console.log(`[WhatsApp] Normalized message: "${normalizedMessage}" (length: ${normalizedMessage.length})`);
 
       // Detect YES/NO (support Arabic and English) - simple and flexible matching

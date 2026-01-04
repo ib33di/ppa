@@ -16,30 +16,68 @@ export class WebhooksService {
   ) {}
 
   /**
-   * Handle incoming WhatsApp webhook from AdWhats
-   * Expected payload structure (based on AdWhats API):
+   * Handle incoming WhatsApp webhook from Ultramsg.com
+   * Expected payload structure (based on Ultramsg API):
    * {
-   *   "whatsapp_account_id": 1,
+   *   "instance": "instance_id",
    *   "from": "966512345678",
-   *   "message": "YES"
+   *   "body": "YES",
+   *   "type": "chat"
+   * }
+   * Or alternative format:
+   * {
+   *   "data": {
+   *     "from": "966512345678",
+   *     "body": "YES"
+   *   }
    * }
    */
   async handleWhatsAppWebhook(payload: any): Promise<{ success: boolean; message?: string }> {
     try {
       console.log('[Webhook] ========== INCOMING WEBHOOK ==========');
       console.log('[Webhook] Full payload:', JSON.stringify(payload, null, 2));
+      console.log('[Webhook] Payload keys:', Object.keys(payload || {}));
       console.log('[Webhook] Processing WhatsApp message:', {
-        from: payload.from,
-        message: payload.message,
-        accountId: payload.whatsapp_account_id,
+        from: payload?.from,
+        message: payload?.message,
+        text: payload?.text,
+        body: payload?.body,
+        content: payload?.content,
+        accountId: payload?.whatsapp_account_id,
         timestamp: new Date().toISOString(),
       });
 
-      const { from, message, whatsapp_account_id, button_id, interactive } = payload;
+      // Extract phone number from various possible fields (Ultramsg format)
+      const from = payload?.from || 
+                    payload?.data?.from || 
+                    payload?.phone || 
+                    payload?.phone_number || 
+                    payload?.sender || 
+                    payload?.wa_id ||
+                    null;
+      
+      // Extract message text from various possible fields (Ultramsg uses "body")
+      // Ultramsg typically sends: { from: "...", body: "...", type: "chat" }
+      let message = payload?.body || 
+                    payload?.data?.body ||
+                    payload?.message || 
+                    payload?.text || 
+                    payload?.content || 
+                    payload?.data?.message ||
+                    payload?.data?.text ||
+                    payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body ||
+                    payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.body ||
+                    null;
+
+      // Extract instance ID if present (for verification)
+      const instanceId = payload?.instance || payload?.data?.instance || null;
+      
+      // Extract button/interactive data if present
+      const { button_id, interactive } = payload;
 
       // Handle interactive button responses
       // Button responses may come as button_id or in interactive object
-      let messageText = message;
+      let messageText = message || '';
       if (button_id) {
         // Button was clicked - extract response from button_id
         console.log('[Webhook] Button clicked:', button_id);
@@ -68,22 +106,36 @@ export class WebhooksService {
         }
       }
 
-      if (!from || (!messageText && !button_id && !interactive)) {
-        console.warn('[Webhook] Missing required fields:', { 
+      // Final check: ensure we have either a message or button/interactive response
+      if (!from) {
+        console.error('[Webhook] Missing phone number (from field)');
+        console.error('[Webhook] Payload structure:', JSON.stringify(payload, null, 2));
+        return { success: false, message: 'Missing phone number (from field)' };
+      }
+
+      if (!messageText && !button_id && !interactive) {
+        console.warn('[Webhook] Missing message content:', { 
           from, 
-          message,
+          originalMessage: message,
           messageText,
           button_id,
           interactive,
           hasFrom: !!from,
           hasMessage: !!messageText,
-          payloadKeys: Object.keys(payload),
+          payloadKeys: Object.keys(payload || {}),
+          payloadStructure: JSON.stringify(payload, null, 2),
         });
-        return { success: false, message: 'Missing required fields' };
+        return { success: false, message: 'Missing message content' };
+      }
+
+      // If messageText is still empty but we have button_id or interactive, that's OK
+      // But if it's truly undefined/null, set it to empty string
+      if (!messageText) {
+        messageText = '';
       }
 
       // Process incoming message (detects YES/NO)
-      // Note: AdWhats sends phone number without + prefix (e.g., "966512345678")
+      // Note: Ultramsg sends phone number without + prefix (e.g., "966512345678")
       console.log('[Webhook] Calling processIncomingMessage...');
       console.log('[Webhook] Parameters:', { from, message: messageText, originalMessage: message });
       const result = await this.whatsappService.processIncomingMessage(from, messageText);
