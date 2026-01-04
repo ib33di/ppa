@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { WhatsAppController } from './whatsapp.controller';
 import { WhatsAppService } from './whatsapp.service';
 import { InvitationsModule } from '../invitations/invitations.module';
@@ -9,7 +9,7 @@ import { MatchesModule } from '../matches/matches.module';
   controllers: [WhatsAppController],
   providers: [WhatsAppService],
   exports: [WhatsAppService],
-  imports: [InvitationsModule, PlayersModule, MatchesModule],
+  imports: [forwardRef(() => InvitationsModule), PlayersModule, MatchesModule],
 })
 export class WhatsAppModule {}
 

@@ -21,11 +21,39 @@ export class MatchesController {
     });
   }
 
+  /**
+   * Slot-driven match creation (used by center grid + right panel flow).
+   * The optional `slot_time` is used for availability validation in HH:MM local "wall clock" format.
+   */
+  @Post('create')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'manager')
+  createFromSlot(
+    @Body()
+    body: {
+      court_id: string;
+      scheduled_time: string;
+      slot_time?: string; // HH:MM
+      target_count?: number;
+      status?: string;
+    },
+    @Request() req,
+  ) {
+    return this.matchesService.createFromSlot(
+      {
+        ...body,
+        created_by: req.user.sub,
+      },
+      body.slot_time,
+    );
+  }
+
   @Get()
-  findAll(@Query('status') status?: string) {
-    if (status) {
-      return this.matchesService.findByStatus(status);
+  findAll(@Query('status') status?: string, @Query('courtId') courtId?: string) {
+    if (courtId) {
+      return this.matchesService.findByCourt(courtId, status);
     }
+    if (status) return this.matchesService.findByStatus(status);
     return this.matchesService.findAll();
   }
 

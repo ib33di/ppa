@@ -1,21 +1,30 @@
-import React, { useEffect, useRef } from 'react';
-import { Match, Invitation } from '../types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Match, Player } from '../types';
 import { Icon } from './Icons';
+import { api } from '../lib/api';
 
 interface CourtDetailsPanelProps {
   match: Match | null;
   courtName: string;
+  courtId: string;
   time: string;
+  players: Player[];
   onClose: () => void;
 }
 
 export const CourtDetailsPanel: React.FC<CourtDetailsPanelProps> = ({ 
   match, 
   courtName, 
+  courtId,
   time,
+  players,
   onClose 
 }) => {
   const feedRef = useRef<HTMLDivElement>(null);
+  const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string>('');
+  const [sendSummary, setSendSummary] = useState<string>('');
 
   useEffect(() => {
     // Auto-scroll to bottom when new messages arrive
@@ -23,6 +32,127 @@ export const CourtDetailsPanel: React.FC<CourtDetailsPanelProps> = ({
       feedRef.current.scrollTop = feedRef.current.scrollHeight;
     }
   }, [match?.invitations]);
+
+  const selectedTimeIso = useMemo(() => {
+    const [hh, mm] = time.split(':').map((v) => parseInt(v, 10));
+    const d = new Date();
+    d.setSeconds(0, 0);
+    d.setHours(hh, mm);
+    return d.toISOString();
+  }, [time]);
+
+  const existingInvitedPlayerIds = useMemo(() => {
+    const ids = new Set<string>();
+    (match?.invitations || []).forEach((inv) => {
+      if (inv.player_id) ids.add(inv.player_id);
+    });
+    return ids;
+  }, [match]);
+
+  const togglePlayer = (playerId: string) => {
+    setSelectedPlayers((prev) => (prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]));
+  };
+
+  const handleSendInvitations = async () => {
+    setSendError('');
+    setSendSummary('');
+    if (selectedPlayers.length === 0) {
+      setSendError('Select at least 1 player');
+      return;
+    }
+
+    setSending(true);
+    try {
+      let matchId = match?.id;
+
+      // Create match from selected slot if needed
+      if (!matchId) {
+        const created = await api.post<{ id: string }>('/matches/create', {
+          court_id: courtId,
+          scheduled_time: selectedTimeIso,
+          slot_time: time,
+          status: 'Inviting',
+          target_count: 4,
+        });
+        matchId = created.id;
+      }
+
+      const result = await api.post<{ results: Array<{ invitationId: string; success: boolean; error?: string }> }>(
+        '/invitations/send',
+        { match_id: matchId, player_ids: selectedPlayers }
+      );
+
+      const failed = result.results.filter((r) => !r.success);
+      if (failed.length > 0) {
+        setSendError(`Failed to send ${failed.length} invitation(s).`);
+      } else {
+        setSendSummary(`Sent ${result.results.length} invitation(s).`);
+      }
+
+      setSelectedPlayers([]);
+    } catch (e: any) {
+      setSendError(e?.message || 'Failed to send invitations');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const PlayerPicker = (
+    <div className="p-4 border-b border-zinc-800">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Invite Players</h3>
+        <div className="text-[10px] text-zinc-600 font-mono">{time}</div>
+      </div>
+
+      {sendError && (
+        <div className="mb-3 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+          {sendError}
+        </div>
+      )}
+      {sendSummary && (
+        <div className="mb-3 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs">
+          {sendSummary}
+        </div>
+      )}
+
+      <div className="max-h-48 overflow-y-auto space-y-1">
+        {players.map((p) => {
+          const alreadyInvited = existingInvitedPlayerIds.has(p.id);
+          return (
+            <label
+              key={p.id}
+              className={`flex items-center gap-2 p-2 rounded cursor-pointer border ${
+                alreadyInvited
+                  ? 'bg-zinc-900/30 border-zinc-800 opacity-60'
+                  : 'bg-zinc-900/50 border-zinc-800 hover:bg-zinc-900'
+              }`}
+              title={alreadyInvited ? 'Already invited' : ''}
+            >
+              <input
+                type="checkbox"
+                disabled={alreadyInvited || sending}
+                checked={selectedPlayers.includes(p.id)}
+                onChange={() => togglePlayer(p.id)}
+              />
+              <div className="flex-1">
+                <div className="text-xs text-zinc-200 font-medium">{p.name}</div>
+                <div className="text-[10px] text-zinc-500">{p.level || 'N/A'} {p.position || ''}</div>
+              </div>
+              {alreadyInvited && <span className="text-[10px] text-zinc-500 font-mono">INVITED</span>}
+            </label>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={handleSendInvitations}
+        disabled={sending}
+        className="mt-3 w-full py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white rounded-lg transition-colors text-xs font-bold"
+      >
+        {sending ? 'Sending…' : 'Send Invitations'}
+      </button>
+    </div>
+  );
 
   if (!match) {
     return (
@@ -36,11 +166,12 @@ export const CourtDetailsPanel: React.FC<CourtDetailsPanelProps> = ({
             <Icon name="x" className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 flex items-center justify-center p-8">
-          <div className="text-center text-zinc-500">
+        <div className="flex-1 overflow-y-auto">
+          {PlayerPicker}
+          <div className="p-8 text-center text-zinc-500">
             <Icon name="info" className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p className="text-sm">No match scheduled</p>
-            <p className="text-xs mt-1">Select a slot to view details</p>
+            <p className="text-xs mt-1">Use the panel above to create this match and send invites.</p>
           </div>
         </div>
       </div>
@@ -158,6 +289,8 @@ export const CourtDetailsPanel: React.FC<CourtDetailsPanelProps> = ({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
+        {(match.status !== 'Locked' && match.status !== 'Confirmed') && PlayerPicker}
+
         {/* Agent State */}
         <div className="p-4 border-b border-zinc-800">
           <div className="flex items-center gap-2 mb-2">
