@@ -26,6 +26,8 @@ export class WebhooksService {
    */
   async handleWhatsAppWebhook(payload: any): Promise<{ success: boolean; message?: string }> {
     try {
+      console.log('[Webhook] ========== INCOMING WEBHOOK ==========');
+      console.log('[Webhook] Full payload:', JSON.stringify(payload, null, 2));
       console.log('[Webhook] Processing WhatsApp message:', {
         from: payload.from,
         message: payload.message,
@@ -36,18 +38,26 @@ export class WebhooksService {
       const { from, message, whatsapp_account_id } = payload;
 
       if (!from || !message) {
-        console.warn('[Webhook] Missing required fields:', { from, message });
+        console.warn('[Webhook] Missing required fields:', { 
+          from, 
+          message,
+          hasFrom: !!from,
+          hasMessage: !!message,
+          payloadKeys: Object.keys(payload),
+        });
         return { success: false, message: 'Missing required fields' };
       }
 
       // Process incoming message (detects YES/NO)
       // Note: AdWhats sends phone number without + prefix (e.g., "966512345678")
       console.log('[Webhook] Calling processIncomingMessage...');
+      console.log('[Webhook] Parameters:', { from, message });
       const result = await this.whatsappService.processIncomingMessage(from, message);
-      console.log('[Webhook] processIncomingMessage result:', result);
+      console.log('[Webhook] processIncomingMessage result:', JSON.stringify(result, null, 2));
 
       if (!result.success) {
         console.warn(`[Webhook] Processing failed: ${result.action}`);
+        console.warn(`[Webhook] Full result:`, result);
         return { success: false, message: `Processing failed: ${result.action}` };
       }
 

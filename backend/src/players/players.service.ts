@@ -29,30 +29,52 @@ export class PlayersService {
   }
 
   async findByPhone(phone: string) {
-    // Normalize phone number (remove + and spaces)
-    const normalizedPhone = phone.replace(/^\+/, '').replace(/\s/g, '');
+    // Normalize phone number (remove +, spaces, dashes)
+    const normalizedPhone = phone.replace(/^\+/, '').replace(/\s/g, '').replace(/-/g, '');
     
-    // Try exact match first
-    let { data, error } = await this.supabase
-      .from('players')
-      .select('*')
-      .eq('phone', phone)
-      .single();
+    console.log(`[Players] Searching for player with phone:`, {
+      original: phone,
+      normalized: normalizedPhone,
+    });
+    
+    // Try multiple formats
+    const phoneVariants = [
+      phone,                    // Original
+      normalizedPhone,          // Without + and spaces
+      `+${normalizedPhone}`,   // With + prefix
+    ];
 
-    // If not found, try normalized version
-    if (error && error.code === 'PGRST116') {
-      const { data: normalizedData, error: normalizedError } = await this.supabase
-        .from('players')
-        .select('*')
-        .eq('phone', normalizedPhone)
-        .single();
-      
-      if (normalizedError && normalizedError.code !== 'PGRST116') throw normalizedError;
-      return normalizedData;
+    for (const phoneVariant of phoneVariants) {
+      try {
+        const { data, error } = await this.supabase
+          .from('players')
+          .select('*')
+          .eq('phone', phoneVariant)
+          .single();
+
+        if (!error && data) {
+          console.log(`[Players] Found player with phone variant: ${phoneVariant}`, {
+            playerId: data.id,
+            playerName: data.name,
+          });
+          return data;
+        }
+
+        // If error is not "not found", throw it
+        if (error && error.code !== 'PGRST116') {
+          console.error(`[Players] Error searching for phone ${phoneVariant}:`, error);
+          throw error;
+        }
+      } catch (error) {
+        // If it's not a "not found" error, rethrow
+        if (error.code !== 'PGRST116') {
+          throw error;
+        }
+      }
     }
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
-    return data;
+    console.warn(`[Players] Player not found for any phone variant:`, phoneVariants);
+    return null;
   }
 
   async create(createPlayerDto: CreatePlayerDto) {
