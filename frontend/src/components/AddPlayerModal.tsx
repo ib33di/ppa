@@ -31,7 +31,7 @@ export function AddPlayerModal({ onClose, onSuccess }: AddPlayerModalProps) {
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'فشل إضافة اللاعب');
+      setError(err.message || 'Failed to add player');
     } finally {
       setLoading(false);
     }
@@ -41,7 +41,7 @@ export function AddPlayerModal({ onClose, onSuccess }: AddPlayerModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 w-full max-w-md">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-white">إضافة لاعب جديد</h3>
+          <h3 className="text-xl font-bold text-white">Add New Player</h3>
           <button onClick={onClose} className="text-zinc-500 hover:text-white">
             <Icon name="x" className="w-5 h-5" />
           </button>
@@ -55,7 +55,7 @@ export function AddPlayerModal({ onClose, onSuccess }: AddPlayerModalProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-sm font-medium text-zinc-400 mb-2 block">الاسم *</label>
+            <label className="text-sm font-medium text-zinc-400 mb-2 block">Name *</label>
             <input
               type="text"
               value={formData.name}
@@ -66,7 +66,7 @@ export function AddPlayerModal({ onClose, onSuccess }: AddPlayerModalProps) {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-zinc-400 mb-2 block">رقم الهاتف *</label>
+            <label className="text-sm font-medium text-zinc-400 mb-2 block">Phone Number *</label>
             <input
               type="tel"
               value={formData.phone}
@@ -78,7 +78,7 @@ export function AddPlayerModal({ onClose, onSuccess }: AddPlayerModalProps) {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-zinc-400 mb-2 block">المستوى</label>
+            <label className="text-sm font-medium text-zinc-400 mb-2 block">Level</label>
             <input
               type="text"
               value={formData.level}
@@ -89,20 +89,20 @@ export function AddPlayerModal({ onClose, onSuccess }: AddPlayerModalProps) {
           </div>
 
           <div>
-            <label className="text-sm font-medium text-zinc-400 mb-2 block">الموضع</label>
+            <label className="text-sm font-medium text-zinc-400 mb-2 block">Position</label>
             <select
               value={formData.position}
               onChange={(e) => setFormData({ ...formData, position: e.target.value as 'Left' | 'Right' | 'Both' })}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-white"
             >
-              <option value="Left">يسار</option>
-              <option value="Right">يمين</option>
-              <option value="Both">كلاهما</option>
+              <option value="Left">Left</option>
+              <option value="Right">Right</option>
+              <option value="Both">Both</option>
             </select>
           </div>
 
           <div>
-            <label className="text-sm font-medium text-zinc-400 mb-2 block">نقاط الثقة (0-100)</label>
+            <label className="text-sm font-medium text-zinc-400 mb-2 block">Trust Score (0-100)</label>
             <input
               type="number"
               min="0"
@@ -119,14 +119,14 @@ export function AddPlayerModal({ onClose, onSuccess }: AddPlayerModalProps) {
               onClick={onClose}
               className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
             >
-              إلغاء
+              Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
               className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
-              {loading ? 'جاري الإضافة...' : 'إضافة'}
+              {loading ? 'Adding...' : 'Add'}
             </button>
           </div>
         </form>

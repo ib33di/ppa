@@ -154,13 +154,13 @@ function AppContent() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-zinc-400">{user?.email}</span>
-              {user?.role && (
+                  {user?.role && (
                 <span className={`text-xs px-2 py-1 rounded ${
                   user.role === 'admin' ? 'bg-emerald-500/20 text-emerald-400' :
                   user.role === 'manager' ? 'bg-blue-500/20 text-blue-400' :
                   'bg-zinc-500/20 text-zinc-400'
                 }`}>
-                  {user.role === 'admin' ? 'مدير' : user.role === 'manager' ? 'مدير' : 'مستخدم'}
+                  {user.role === 'admin' ? 'Admin' : user.role === 'manager' ? 'Manager' : 'User'}
                 </span>
               )}
             </div>
@@ -168,20 +168,20 @@ function AppContent() {
               <button
                 onClick={() => setShowAddPlayer(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
-                title="إضافة لاعب"
+                title="Add Player"
               >
                 <Icon name="plus" className="w-4 h-4" />
-                إضافة لاعب
+                Add Player
               </button>
             )}
             {isAdmin && (
               <button
                 onClick={() => setShowAddCourt(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
-                title="إضافة ملعب"
+                title="Add Court"
               >
                 <Icon name="plus" className="w-4 h-4" />
-                إضافة ملعب
+                Add Court
               </button>
             )}
             <button
@@ -226,7 +226,7 @@ function AppContent() {
                 currentView === 'admin' ? 'text-emerald-400 border-b-2 border-emerald-500' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              الإدارة {isAdmin && <span className="ml-1 text-xs">(مدير)</span>}
+              Admin {isAdmin && <span className="ml-1 text-xs">(Admin)</span>}
             </button>
           </div>
         </div>
@@ -279,7 +279,7 @@ function AppContent() {
                     className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
                   >
                     <Icon name="plus" className="w-4 h-4" />
-                    إضافة لاعب
+                    Add Player
                   </button>
                 )}
               </div>
@@ -305,7 +305,7 @@ function AppContent() {
           {currentView === 'admin' && (
             <div>
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-white">لوحة الإدارة</h2>
+                <h2 className="text-2xl font-bold text-white">Admin Panel</h2>
                 <div className="flex items-center gap-3">
                   <div className="text-sm text-zinc-400">
                     {user?.email}
@@ -315,11 +315,11 @@ function AppContent() {
                     user?.role === 'manager' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
                     'bg-zinc-500/20 text-zinc-400 border border-zinc-500/30'
                   }`}>
-                    {user?.role === 'admin' ? 'مدير' : user?.role === 'manager' ? 'مدير' : user?.role || 'غير محدد'}
+                    {user?.role === 'admin' ? 'Admin' : user?.role === 'manager' ? 'Manager' : user?.role || 'Undefined'}
                   </div>
                   {!isAdmin && (
                     <div className="text-xs text-rose-400 bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20">
-                      صلاحيات محدودة
+                      Limited Permissions
                     </div>
                   )}
                 </div>
@@ -328,23 +328,23 @@ function AppContent() {
               {/* Players Management */}
               <div className="mb-8">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-white">إدارة اللاعبين</h3>
+                  <h3 className="text-xl font-bold text-white">Players Management</h3>
                   {(isAdmin || isManager) && (
                     <button
                       onClick={() => setShowAddPlayer(true)}
                       className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
                     >
                       <Icon name="plus" className="w-4 h-4" />
-                      إضافة لاعب جديد
+                      Add New Player
                     </button>
                   )}
                 </div>
                 <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
                   <div className="text-sm text-zinc-400">
-                    إجمالي اللاعبين: <span className="text-white font-bold">{playersList.length}</span>
+                    Total Players: <span className="text-white font-bold">{playersList.length}</span>
                   </div>
                   <p className="text-xs text-zinc-500 mt-2">
-                    يمكنك إضافة لاعبين جدد من هنا أو من صفحة اللاعبين
+                    You can add new players from here or from the Players page
                   </p>
                 </div>
               </div>
@@ -352,14 +352,14 @@ function AppContent() {
               {/* Courts Management */}
               <div className="mb-8">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-white">إدارة الملاعب</h3>
+                  <h3 className="text-xl font-bold text-white">Courts Management</h3>
                   {(isAdmin || isManager) && (
                     <button
                       onClick={() => setShowAddCourt(true)}
                       className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
                     >
                       <Icon name="plus" className="w-4 h-4" />
-                      إضافة ملعب جديد
+                      Add New Court
                     </button>
                   )}
                 </div>
@@ -370,7 +370,7 @@ function AppContent() {
                         <div>
                           <div className="font-bold text-white">{court.name}</div>
                           <div className="text-xs text-zinc-500 mt-1">
-                            {court.is_active ? 'نشط' : 'غير نشط'}
+                            {court.is_active ? 'Active' : 'Inactive'}
                           </div>
                         </div>
                         <div className={`w-3 h-3 rounded-full ${court.is_active ? 'bg-emerald-500' : 'bg-zinc-600'}`} />
@@ -382,18 +382,18 @@ function AppContent() {
 
               {/* Available Times */}
               <div>
-                <h3 className="text-xl font-bold text-white mb-4">الأوقات المتاحة</h3>
+                <h3 className="text-xl font-bold text-white mb-4">Available Times</h3>
                 <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {['17:00', '18:30', '20:00', '21:30'].map(time => (
                       <div key={time} className="bg-zinc-950 border border-zinc-800 rounded-lg p-4 text-center">
                         <div className="text-lg font-bold text-white">{time}</div>
-                        <div className="text-xs text-zinc-500 mt-1">متاح</div>
+                        <div className="text-xs text-zinc-500 mt-1">Available</div>
                       </div>
                     ))}
                   </div>
                   <p className="text-sm text-zinc-400 mt-4">
-                    هذه الأوقات الافتراضية لجميع الملاعب. يمكن تعديلها لاحقاً حسب الحاجة.
+                    These are the default times for all courts. They can be modified later as needed.
                   </p>
                 </div>
               </div>

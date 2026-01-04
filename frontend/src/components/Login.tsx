@@ -21,7 +21,7 @@ export function Login() {
         await signIn(email, password);
       } else {
         if (!name.trim()) {
-          setError('الاسم مطلوب');
+          setError('Name is required');
           setLoading(false);
           return;
         }
@@ -29,7 +29,7 @@ export function Login() {
       }
       // Redirect will happen automatically via AuthContext
     } catch (err: any) {
-      setError(err.message || 'حدث خطأ. يرجى المحاولة مرة أخرى.');
+      setError(err.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -45,10 +45,10 @@ export function Login() {
               <span className="font-black text-indigo-500 text-xl">PPA</span>
             </div>
             <h1 className="text-2xl font-bold text-white mb-2">
-              {isLogin ? 'تسجيل الدخول' : 'إنشاء حساب'}
+              {isLogin ? 'Sign In' : 'Create Account'}
             </h1>
             <p className="text-zinc-400 text-sm">
-              {isLogin ? 'مرحباً بعودتك' : 'ابدأ إدارة المباريات'}
+              {isLogin ? 'Welcome back' : 'Start managing matches'}
             </p>
           </div>
 
@@ -64,14 +64,14 @@ export function Login() {
             {!isLogin && (
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-2">
-                  الاسم
+                  Name
                 </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                  placeholder="أدخل اسمك"
+                  placeholder="Enter your name"
                   required={!isLogin}
                 />
               </div>
@@ -79,7 +79,7 @@ export function Login() {
 
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-2">
-                البريد الإلكتروني
+                Email
               </label>
               <input
                 type="email"
@@ -93,7 +93,7 @@ export function Login() {
 
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-2">
-                كلمة المرور
+                Password
               </label>
               <input
                 type="password"
@@ -114,10 +114,10 @@ export function Login() {
               {loading ? (
                 <>
                   <Icon name="refresh" className="w-4 h-4 animate-spin" />
-                  جاري المعالجة...
+                  Processing...
                 </>
               ) : (
-                isLogin ? 'تسجيل الدخول' : 'إنشاء حساب'
+                isLogin ? 'Sign In' : 'Create Account'
               )}
             </button>
           </form>
@@ -132,9 +132,9 @@ export function Login() {
               className="text-sm text-zinc-400 hover:text-white transition-colors"
             >
               {isLogin ? (
-                <>ليس لديك حساب؟ <span className="text-indigo-400 font-medium">إنشاء حساب</span></>
+                <>Don't have an account? <span className="text-indigo-400 font-medium">Create Account</span></>
               ) : (
-                <>لديك حساب بالفعل؟ <span className="text-indigo-400 font-medium">تسجيل الدخول</span></>
+                <>Already have an account? <span className="text-indigo-400 font-medium">Sign In</span></>
               )}
             </button>
           </div>

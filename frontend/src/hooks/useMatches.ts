@@ -8,32 +8,69 @@ export function useMatches() {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    fetchMatches();
-
-    // Subscribe to real-time updates
-    const subscription = supabase
-      .channel('matches-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'matches',
-        },
-        () => {
-          fetchMatches();
+    // Wait for Supabase session before fetching
+    const initializeAndFetch = async () => {
+      try {
+        // Ensure we have a session - wait up to 2 seconds for auth to complete
+        let session = null;
+        for (let i = 0; i < 4; i++) {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (currentSession) {
+            session = currentSession;
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
-      )
-      .subscribe();
+        
+        if (!session) {
+          console.warn('No Supabase session found after waiting, fetching anyway (RLS policies should allow)');
+        }
+        
+        await fetchMatches();
+
+        // Subscribe to real-time updates
+        const subscription = supabase
+          .channel('matches-changes')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'matches',
+            },
+            () => {
+              fetchMatches();
+            }
+          )
+          .subscribe();
+
+        return () => {
+          subscription.unsubscribe();
+        };
+      } catch (err) {
+        console.error('Error initializing matches:', err);
+        setError(err as Error);
+        setLoading(false);
+        return () => {}; // Return empty cleanup function
+      }
+    };
+
+    let subscriptionCleanup: (() => void) | undefined;
+    initializeAndFetch().then(cleanup => {
+      subscriptionCleanup = cleanup;
+    });
 
     return () => {
-      subscription.unsubscribe();
+      if (subscriptionCleanup) {
+        subscriptionCleanup();
+      }
     };
   }, []);
 
   const fetchMatches = async () => {
     try {
       setLoading(true);
+      setError(null);
       const { data, error } = await supabase
         .from('matches')
         .select(`
@@ -46,9 +83,13 @@ export function useMatches() {
         `)
         .order('scheduled_time', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error fetching matches:', error);
+        throw error;
+      }
       setMatches(data as Match[]);
     } catch (err) {
+      console.error('Error fetching matches:', err);
       setError(err as Error);
     } finally {
       setLoading(false);

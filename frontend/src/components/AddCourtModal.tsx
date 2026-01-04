@@ -25,7 +25,7 @@ export function AddCourtModal({ onClose, onSuccess }: AddCourtModalProps) {
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'فشل إضافة الملعب');
+      setError(err.message || 'Failed to add court');
     } finally {
       setLoading(false);
     }
@@ -35,7 +35,7 @@ export function AddCourtModal({ onClose, onSuccess }: AddCourtModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
       <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 w-full max-w-md">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-white">إضافة ملعب جديد</h3>
+          <h3 className="text-xl font-bold text-white">Add New Court</h3>
           <button onClick={onClose} className="text-zinc-500 hover:text-white">
             <Icon name="x" className="w-5 h-5" />
           </button>
@@ -49,13 +49,13 @@ export function AddCourtModal({ onClose, onSuccess }: AddCourtModalProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-sm font-medium text-zinc-400 mb-2 block">اسم الملعب *</label>
+            <label className="text-sm font-medium text-zinc-400 mb-2 block">Court Name *</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-2 text-white"
-              placeholder="مثال: الملعب الرئيسي"
+              placeholder="e.g., Main Court"
               required
             />
           </div>
@@ -66,14 +66,14 @@ export function AddCourtModal({ onClose, onSuccess }: AddCourtModalProps) {
               onClick={onClose}
               className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
             >
-              إلغاء
+              Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
               className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
-              {loading ? 'جاري الإضافة...' : 'إضافة'}
+              {loading ? 'Adding...' : 'Add'}
             </button>
           </div>
         </form>
