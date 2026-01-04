@@ -7,6 +7,20 @@ import { UpdateMatchDto } from './dto/update-match.dto';
 export class MatchesService {
   constructor(private supabase: SupabaseService) {}
 
+  private isMissingTableError(err: any, table: string): boolean {
+    const code = String(err?.code || '');
+    const message = String(err?.message || '');
+    const details = String(err?.details || '');
+
+    // Common Supabase/PostgREST code when a table isn't in the schema cache.
+    if (code === 'PGRST205' && (message.includes(table) || details.includes(table))) return true;
+
+    // Defensive fallbacks for other environments/messages.
+    if ((message + details).includes(table) && (message.includes('schema cache') || message.includes('does not exist'))) return true;
+
+    return false;
+  }
+
   private hhmmToMinutes(hhmm: string): number {
     const [h, m] = hhmm.split(':').map((v) => parseInt(v, 10));
     if (Number.isNaN(h) || Number.isNaN(m)) throw new BadRequestException('Invalid time format (HH:MM)');
@@ -27,7 +41,11 @@ export class MatchesService {
       .eq('court_id', courtId)
       .order('start_time', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      // Backward compatible: if the migration wasn't applied yet, allow any time.
+      if (this.isMissingTableError(error, 'court_availability')) return;
+      throw new BadRequestException(`Failed to load court availability: ${error.message || 'Unknown error'}`);
+    }
     if (!ranges || ranges.length === 0) {
       // Backward compatible: if no availability is defined, allow any time.
       return;
@@ -53,7 +71,9 @@ export class MatchesService {
       .eq('scheduled_time', scheduledTimeIso)
       .maybeSingle();
 
-    if (error) throw error;
+    if (error) {
+      throw new BadRequestException(`Failed to validate slot uniqueness: ${error.message || 'Unknown error'}`);
+    }
     if (data?.id) {
       throw new BadRequestException('A match already exists for this court and time slot');
     }
@@ -158,7 +178,9 @@ export class MatchesService {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      throw new BadRequestException(`Failed to create match: ${error.message || 'Unknown error'}`);
+    }
     return data;
   }
 
