@@ -25,53 +25,137 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
+    // Function to load user profile with role
+    const loadUserProfile = async (userId: string, email: string) => {
+      try {
+        // First try to get role from backend
+        const storedToken = localStorage.getItem('access_token');
+        if (storedToken) {
+          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/profile`, {
+            headers: {
+              'Authorization': `Bearer ${storedToken}`,
+            },
+          });
+          
+          if (response.ok) {
+            const userData = await response.json();
+            let userRole = userData.role || 'user';
+            if (userRole === 'authenticated') {
+              userRole = 'user';
+            }
+            console.log('User profile loaded from backend:', { email: userData.email, role: userRole, rawRole: userData.role });
+            return {
+              id: userData.id || userId,
+              email: userData.email || email,
+              role: userRole,
+            } as UserWithRole;
+          }
+        }
+        
+        // Fallback: Try to get role from Supabase user_profiles table
+        const { data: profile, error } = await supabase
+          .from('user_profiles')
+          .select('role, name')
+          .eq('id', userId)
+          .single();
+        
+        if (profile && !error) {
+          let userRole = profile.role || 'user';
+          if (userRole === 'authenticated') {
+            userRole = 'user';
+          }
+          console.log('User profile loaded from Supabase:', { email, role: userRole, rawRole: profile.role });
+          return {
+            id: userId,
+            email: email,
+            role: userRole,
+          } as UserWithRole;
+        }
+        
+        // Default fallback
+        console.log('Using default role for user:', { email, userId });
+        return {
+          id: userId,
+          email: email,
+          role: 'user',
+        } as UserWithRole;
+      } catch (error) {
+        console.error('Error loading user profile:', error);
+        return {
+          id: userId,
+          email: email,
+          role: 'user',
+        } as UserWithRole;
+      }
+    };
+
     // Check for stored token
     const storedToken = localStorage.getItem('access_token');
     if (storedToken) {
       setToken(storedToken);
-      // Verify token with backend
-      fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/profile`, {
-        headers: {
-          'Authorization': `Bearer ${storedToken}`,
-        },
-      })
-        .then(res => {
-          if (res.ok) {
-            return res.json();
-          }
-          throw new Error('Invalid token');
-        })
-        .then(userData => {
-          // Create a user object from backend response
-          // Filter out 'authenticated' as it's not a valid role
-          let userRole = userData.role || 'user';
-          if (userRole === 'authenticated') {
-            userRole = 'user';
-          }
-          console.log('User profile loaded:', { email: userData.email, role: userRole, rawRole: userData.role });
-          setUser({
-            id: userData.id,
-            email: userData.email,
-            role: userRole,
-          } as UserWithRole);
+      
+      // Get session from Supabase first to get userId
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (session?.user) {
+          const userWithRole = await loadUserProfile(session.user.id, session.user.email || '');
+          setUser(userWithRole);
           setLoading(false);
-        })
-        .catch(() => {
-          localStorage.removeItem('access_token');
-          setToken(null);
-          setUser(null);
-          setLoading(false);
-        });
+        } else {
+          // No Supabase session, try backend only
+          fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/profile`, {
+            headers: {
+              'Authorization': `Bearer ${storedToken}`,
+            },
+          })
+            .then(res => {
+              if (res.ok) {
+                return res.json();
+              }
+              throw new Error('Invalid token');
+            })
+            .then(async userData => {
+              let userRole = userData.role || 'user';
+              if (userRole === 'authenticated') {
+                userRole = 'user';
+              }
+              console.log('User profile loaded (backend only):', { email: userData.email, role: userRole, rawRole: userData.role });
+              
+              // Try to get updated role from Supabase if we have userId
+              if (userData.id) {
+                const userWithRole = await loadUserProfile(userData.id, userData.email || '');
+                setUser(userWithRole);
+              } else {
+                setUser({
+                  id: userData.id,
+                  email: userData.email,
+                  role: userRole,
+                } as UserWithRole);
+              }
+              setLoading(false);
+            })
+            .catch(() => {
+              localStorage.removeItem('access_token');
+              setToken(null);
+              setUser(null);
+              setLoading(false);
+            });
+        }
+      });
     } else {
       setLoading(false);
     }
 
-    // Also listen to Supabase auth for Realtime
+    // Listen to Supabase auth changes and update role
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user && !user) {
-        setUser(session.user);
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const userWithRole = await loadUserProfile(session.user.id, session.user.email || '');
+        setUser(userWithRole);
+      } else {
+        setUser(null);
+        setToken(null);
+        localStorage.removeItem('access_token');
       }
     });
 
@@ -95,18 +179,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(result.access_token);
     localStorage.setItem('access_token', result.access_token);
     
-    // Update user state
-    // Filter out 'authenticated' as it's not a valid role
+    // Update user state - use role from backend response
     let userRole = result.user.role || 'user';
     if (userRole === 'authenticated') {
       userRole = 'user';
     }
     console.log('User logged in:', { email: result.user.email, role: userRole, rawRole: result.user.role });
-    setUser({
+    
+    const userWithRole: UserWithRole = {
       id: result.user.id,
       email: result.user.email,
       role: userRole,
-    } as UserWithRole);
+    };
+    setUser(userWithRole);
     
     // Also sign in to Supabase for Realtime subscriptions
     const { error: supabaseError } = await supabase.auth.signInWithPassword({
@@ -116,6 +201,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (supabaseError) {
       console.warn('Supabase auth error:', supabaseError);
+    } else {
+      // After Supabase sign in, verify role from user_profiles table
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('role')
+        .eq('id', result.user.id)
+        .single();
+      
+      if (profile?.role && profile.role !== 'authenticated') {
+        const verifiedRole = profile.role;
+        console.log('Role verified from Supabase:', { email: result.user.email, role: verifiedRole });
+        setUser({
+          ...userWithRole,
+          role: verifiedRole,
+        });
+      }
     }
   };
 
