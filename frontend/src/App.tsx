@@ -136,9 +136,9 @@ function AppContent() {
       // Check if any invitations failed
       const failedInvitations = invitationResults.filter(r => !r.success);
       if (failedInvitations.length > 0) {
-        const errorMsg = `Failed to send ${failedInvitations.length} invitation(s). Check console for details.`;
+        const errorDetails = failedInvitations.map(f => f.error || 'Unknown error').join(', ');
         console.error('Failed invitations:', failedInvitations);
-        alert(errorMsg);
+        alert(`Failed to send ${failedInvitations.length} invitation(s). Errors: ${errorDetails}`);
       } else {
         alert('Match created and invitations sent successfully!');
       }

@@ -19,17 +19,19 @@ export class WhatsAppController {
       );
     }
     
-    const result = await this.whatsappService.sendInvitation(body.invitationId);
-    
-    if (!result.success) {
-      // Return error response with proper status code
+    try {
+      const result = await this.whatsappService.sendInvitation(body.invitationId);
+      
+      // Return the result directly, even if it failed
+      // The frontend will handle the success/failure based on result.success
+      return result;
+    } catch (error) {
+      // Only throw exception for unexpected errors
       throw new HttpException(
-        { success: false, error: result.error || 'Failed to send invitation' },
+        { success: false, error: error.message || 'Failed to send invitation' },
         HttpStatus.INTERNAL_SERVER_ERROR
       );
     }
-    
-    return result;
   }
 }
 
