@@ -4,6 +4,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { MatchesService } from './matches.service';
 import { CreateMatchDto } from './dto/create-match.dto';
+import { CreateMatchFromSlotDto } from './dto/create-match-from-slot.dto';
 import { UpdateMatchDto } from './dto/update-match.dto';
 
 @Controller('matches')
@@ -30,21 +31,16 @@ export class MatchesController {
   @Roles('admin', 'manager')
   createFromSlot(
     @Body()
-    body: {
-      court_id: string;
-      scheduled_time: string;
-      slot_time?: string; // HH:MM
-      target_count?: number;
-      status?: string;
-    },
+    body: CreateMatchFromSlotDto,
     @Request() req,
   ) {
+    const { slot_time, ...createBody } = body;
     return this.matchesService.createFromSlot(
       {
-        ...body,
+        ...(createBody as CreateMatchDto),
         created_by: req.user.sub,
       },
-      body.slot_time,
+      slot_time,
     );
   }
 
