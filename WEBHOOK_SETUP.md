@@ -27,7 +27,29 @@ curl -X POST https://ppa-backend-tfjj.onrender.com/whatsapp/setup-webhook \
 
 ## الطريقة 2: مباشرة عبر AdWhats API
 
-### استخدم curl لإعداد webhook مباشرة:
+### أ) باستخدام PowerShell (Windows):
+
+```powershell
+# الطريقة 1: استخدام السكريبت
+.\setup-webhook.ps1 -ApiToken "YOUR_ADWHATS_API_TOKEN"
+
+# الطريقة 2: مباشرة
+$apiToken = "YOUR_ADWHATS_API_TOKEN"
+$body = @{
+    whatsapp_account_id = 8249
+    url = "https://ppa-backend-tfjj.onrender.com/webhooks/whatsapp"
+    webhook_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkZXZfdG9rZW4iOiJlNGFiNGNlNS1kNTRiLTQxNDUtOTA2ZC1kNzZhYzc1NGY3MDgiLCJpYXQiOjE3Njc0ODA4MjksImV4cCI6MTc5OTAxNjgyOX0.USibzSRHChv2KhoFMmZscxhnECmKz-38aiBhYjssqyI"
+} | ConvertTo-Json
+
+$headers = @{
+    "token" = $apiToken
+    "Content-Type" = "application/json"
+}
+
+Invoke-RestMethod -Uri "https://api.adwhats.net/webhooks/set" -Method Post -Headers $headers -Body $body
+```
+
+### ب) باستخدام curl (Linux/Mac/Git Bash):
 
 ```bash
 curl -X POST https://api.adwhats.net/webhooks/set \
@@ -36,14 +58,13 @@ curl -X POST https://api.adwhats.net/webhooks/set \
   -d '{
     "whatsapp_account_id": 8249,
     "url": "https://ppa-backend-tfjj.onrender.com/webhooks/whatsapp",
-    "webhook_token": "your_webhook_token_here"
+    "webhook_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkZXZfdG9rZW4iOiJlNGFiNGNlNS1kNTRiLTQxNDUtOTA2ZC1kNzZhYzc1NGY3MDgiLCJpYXQiOjE3Njc0ODA4MjksImV4cCI6MTc5OTAxNjgyOX0.USibzSRHChv2KhoFMmZscxhnECmKz-38aiBhYjssqyI"
   }'
 ```
 
 **استبدل:**
-- `YOUR_ADWHATS_API_TOKEN`: الـ token من AdWhats
-- `8249`: Account ID الخاص بك (تحقق من القيمة الصحيحة)
-- `your_webhook_token_here`: الـ token للتحقق (يجب أن يطابق `ADWHATS_WEBHOOK_TOKEN` في `.env`)
+- `YOUR_ADWHATS_API_TOKEN`: الـ token من AdWhats (من صفحة المطورين)
+- `8249`: Account ID الخاص بك (تحقق من القيمة الصحيحة من `/accounts` endpoint)
 
 ## التحقق من أن Webhook يعمل:
 
