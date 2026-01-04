@@ -120,7 +120,7 @@ export class WebhooksService {
       
       // Extract message text from Ultramsg payload structure
       // Ultramsg sends: data.body for the message content
-      let message = payload?.data?.body ||
+      const message = payload?.data?.body ||
                     payload?.body || 
                     payload?.message || 
                     payload?.text || 
@@ -222,29 +222,54 @@ export class WebhooksService {
 
       console.log(`[Webhook] Successfully processed message. Action: ${result.action}`);
 
+      // Ignore unrelated messages safely.
+      if (result.action === 'ignored') {
+        console.log('[Webhook] Ignored unrelated message (no action taken).');
+        return { success: true, message: 'Ignored unrelated message' };
+      }
+
+      // Get player by phone (reused below).
+      const player = await this.playersService.findByPhone(from);
+      if (!player) {
+        console.warn('[Webhook] Player not found for follow-up flow; skipping follow-up actions.', { from });
+        return { success: true, message: `Message processed: ${result.action}` };
+      }
+
       // If confirmed, create payment link
       if (result.action === 'confirmed') {
-        // Find the invitation that was just confirmed
-        // Get player by phone first
-        const player = await this.playersService.findByPhone(from);
-        if (player) {
-          // Find the most recent confirmed invitation for this player
-          const { data: invitations } = await this.supabase
-            .from('invitations')
-            .select('*')
-            .eq('player_id', player.id)
-            .eq('status', 'confirmed')
-            .order('updated_at', { ascending: false })
-            .limit(1);
+        // Find the most recent confirmed invitation for this player.
+        const { data: invitations } = await this.supabase
+          .from('invitations')
+          .select('*')
+          .eq('player_id', player.id)
+          .eq('status', 'confirmed')
+          .order('updated_at', { ascending: false })
+          .limit(1);
 
-          if (invitations && invitations.length > 0) {
-            const confirmedInvitation = invitations[0];
-            // Create payment link (you can integrate with Stripe, PayPal, etc.)
-            const paymentLink = await this.paymentsService.createPaymentLink(confirmedInvitation.id);
-            
-            // Send payment link via WhatsApp
-            await this.whatsappService.sendPaymentLink(confirmedInvitation.id, paymentLink);
-          }
+        if (invitations && invitations.length > 0) {
+          const confirmedInvitation = invitations[0];
+          const paymentLink = await this.paymentsService.createPaymentLink(confirmedInvitation.id);
+          await this.whatsappService.sendPaymentLink(confirmedInvitation.id, paymentLink);
+        } else {
+          console.warn('[Webhook] No confirmed invitation found for follow-up payment link.', { playerId: player.id });
+        }
+      }
+
+      // If declined, send friendly follow-up (no payment link).
+      if (result.action === 'declined') {
+        const { data: invitations } = await this.supabase
+          .from('invitations')
+          .select('*')
+          .eq('player_id', player.id)
+          .eq('status', 'declined')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        if (invitations && invitations.length > 0) {
+          const declinedInvitation = invitations[0];
+          await this.whatsappService.sendDeclineMessage(declinedInvitation.id);
+        } else {
+          console.warn('[Webhook] No declined invitation found for follow-up decline message.', { playerId: player.id });
         }
       }
 
