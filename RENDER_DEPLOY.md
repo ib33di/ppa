@@ -84,7 +84,7 @@ curl -X POST https://api.adwhats.net/webhooks/set \
 - **Backend**: 
   - Root Directory: `backend`
   - Build Command: `npm install && npm run build`
-  - Start Command: `npm run start:prod`
+  - Start Command: `npm run start:prod` (يشغّل `node dist/src/main`)
   
 - **Frontend**:
   - Root Directory: `frontend`
