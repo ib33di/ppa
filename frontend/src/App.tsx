@@ -23,6 +23,16 @@ function AppContent() {
   const [showAddCourt, setShowAddCourt] = useState(false);
   const { user, signOut, isAdmin, isManager } = useAuth();
 
+  // Debug: Log admin status
+  useEffect(() => {
+    console.log('User role check:', { 
+      email: user?.email, 
+      role: user?.role, 
+      isAdmin, 
+      isManager 
+    });
+  }, [user, isAdmin, isManager]);
+
   // Fetch all courts when admin view is opened
   useEffect(() => {
     if (currentView === 'admin' && isAdmin) {
@@ -250,8 +260,35 @@ function AppContent() {
 
           {currentView === 'admin' && isAdmin && (
             <div>
-              <h2 className="text-2xl font-bold text-white mb-6">لوحة الإدارة</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white">لوحة الإدارة</h2>
+                <div className="text-sm text-zinc-400">
+                  {user?.email} - {user?.role === 'admin' ? 'مدير' : 'مستخدم'}
+                </div>
+              </div>
               
+              {/* Players Management */}
+              <div className="mb-8">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-white">إدارة اللاعبين</h3>
+                  <button
+                    onClick={() => setShowAddPlayer(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+                  >
+                    <Icon name="plus" className="w-4 h-4" />
+                    إضافة لاعب جديد
+                  </button>
+                </div>
+                <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+                  <div className="text-sm text-zinc-400">
+                    إجمالي اللاعبين: <span className="text-white font-bold">{playersList.length}</span>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-2">
+                    يمكنك إضافة لاعبين جدد من هنا أو من صفحة اللاعبين
+                  </p>
+                </div>
+              </div>
+
               {/* Courts Management */}
               <div className="mb-8">
                 <div className="flex justify-between items-center mb-4">
@@ -261,7 +298,7 @@ function AppContent() {
                     className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
                   >
                     <Icon name="plus" className="w-4 h-4" />
-                    إضافة ملعب
+                    إضافة ملعب جديد
                   </button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

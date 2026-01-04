@@ -24,11 +24,20 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Get role from user_profiles table
+    const { data: profile } = await this.supabase
+      .from('user_profiles')
+      .select('role, name')
+      .eq('id', data.user.id)
+      .single();
+
+    const userRole = profile?.role || data.user.user_metadata?.role || 'user';
+
     // Generate JWT token
     const payload = {
       sub: data.user.id,
       email: data.user.email,
-      role: data.user.user_metadata?.role || 'user',
+      role: userRole,
     };
 
     const accessToken = this.jwtService.sign(payload);
@@ -38,7 +47,8 @@ export class AuthService {
       user: {
         id: data.user.id,
         email: data.user.email,
-        role: data.user.user_metadata?.role || 'user',
+        role: userRole,
+        name: profile?.name || data.user.user_metadata?.name,
       },
     };
   }
@@ -90,11 +100,18 @@ export class AuthService {
       return null;
     }
 
+    // Get role from user_profiles table
+    const { data: profile } = await this.supabase
+      .from('user_profiles')
+      .select('role, name')
+      .eq('id', userId)
+      .single();
+
     return {
       id: user.id,
       email: user.email,
-      role: user.user_metadata?.role || 'user',
-      name: user.user_metadata?.name,
+      role: profile?.role || user.user_metadata?.role || 'user',
+      name: profile?.name || user.user_metadata?.name,
     };
   }
 

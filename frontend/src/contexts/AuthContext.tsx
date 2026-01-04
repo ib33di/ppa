@@ -43,10 +43,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
         .then(userData => {
           // Create a user object from backend response
+          const userRole = userData.role || 'user';
+          console.log('User profile loaded:', { email: userData.email, role: userRole });
           setUser({
             id: userData.id,
             email: userData.email,
-            role: userData.role || 'user',
+            role: userRole,
           } as UserWithRole);
           setLoading(false);
         })
@@ -90,10 +92,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('access_token', result.access_token);
     
     // Update user state
+    const userRole = result.user.role || 'user';
+    console.log('User logged in:', { email: result.user.email, role: userRole });
     setUser({
       id: result.user.id,
       email: result.user.email,
-      role: result.user.role || 'user',
+      role: userRole,
     } as UserWithRole);
     
     // Also sign in to Supabase for Realtime subscriptions
@@ -125,10 +129,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('access_token', result.access_token);
     
     // Update user state
+    const userRole = result.user.role || 'user';
+    console.log('User registered:', { email: result.user.email, role: userRole });
     setUser({
       id: result.user.id,
       email: result.user.email,
-      role: result.user.role || 'user',
+      role: userRole,
     } as UserWithRole);
     
     // Also sign up to Supabase for Realtime subscriptions
