@@ -75,8 +75,23 @@ export class WhatsAppService {
 
       const result = await response.json();
       
+      console.log('[WhatsApp] Instance status response:', JSON.stringify(result, null, 2));
+      
       // Ultramsg returns status in different formats, check for success indicators
-      if (result.status === 'connected' || result.connected === true || result.instance?.status === 'open') {
+      // Format 1: { status: "connected" } or { connected: true }
+      // Format 2: { status: { accountStatus: { status: "authenticated", substatus: "connected" } } }
+      // Format 3: { instance: { status: "open" } }
+      const isConnected = 
+        result.status === 'connected' || 
+        result.connected === true || 
+        result.instance?.status === 'open' ||
+        (result.status?.accountStatus?.status === 'authenticated' && 
+         (result.status?.accountStatus?.substatus === 'connected' || 
+          result.status?.accountStatus?.substatus === 'authenticated')) ||
+        result.status?.accountStatus?.substatus === 'connected';
+      
+      if (isConnected) {
+        console.log('[WhatsApp] Instance is connected and ready');
         return { valid: true };
       }
 
