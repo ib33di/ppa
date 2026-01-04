@@ -7,6 +7,7 @@ import { useCourts } from './hooks/useCourts';
 import { Icon } from './components/Icons';
 import { AddPlayerModal } from './components/AddPlayerModal';
 import { AddCourtModal } from './components/AddCourtModal';
+import { LiveMatchesPanel } from './components/LiveMatchesPanel';
 import { Match, SlotData } from './types';
 import { api } from './lib/api';
 
@@ -259,35 +260,43 @@ function AppContent() {
           {currentView === 'matchmaking' && (
             <div>
               <h2 className="text-2xl font-bold text-white mb-6">Matchmaking</h2>
-              <div className="grid grid-cols-4 gap-4">
-                {courtsList.map(court => (
-                  <div key={court.id} className="text-center text-xs font-bold text-zinc-500 uppercase mb-2">
-                    {court.name}
-                  </div>
-                ))}
-                {['17:00', '18:30', '20:00', '21:30'].map(time => (
-                  <React.Fragment key={time}>
-                    <div className="text-xs font-mono text-zinc-500">{time}</div>
-                    {courtsList.map(court => {
-                      const slot = slotData.find(s => s.time === time && s.court === court.name);
-                      return (
-                        <div
-                          key={`${court.id}-${time}`}
-                          onClick={() => slot && setSelectedSlot(slot)}
-                          className={`h-24 rounded-lg border cursor-pointer flex items-center justify-center transition-all ${
-                            slot?.status === 'booked' ? 'bg-zinc-950 border-zinc-900 opacity-60' :
-                            slot?.status === 'partial' ? 'bg-zinc-900/40 border-zinc-800' :
-                            'bg-transparent border-zinc-800 hover:bg-zinc-900'
-                          }`}
-                        >
-                          {slot?.status === 'booked' && <Icon name="lock" className="w-5 h-5 text-zinc-600" />}
-                          {slot?.status === 'partial' && <span className="text-xs text-zinc-400">{slot.players}/4</span>}
-                          {slot?.status === 'open' && <Icon name="plus" className="w-4 h-4 text-zinc-600" />}
-                        </div>
-                      );
-                    })}
-                  </React.Fragment>
-                ))}
+              
+              {/* Live Matches Panel */}
+              <LiveMatchesPanel matches={matches} />
+              
+              {/* Grid */}
+              <div className="mt-8">
+                <h3 className="text-lg font-bold text-white mb-4">Schedule Grid</h3>
+                <div className="grid grid-cols-4 gap-4">
+                  {courtsList.map(court => (
+                    <div key={court.id} className="text-center text-xs font-bold text-zinc-500 uppercase mb-2">
+                      {court.name}
+                    </div>
+                  ))}
+                  {['17:00', '18:30', '20:00', '21:30'].map(time => (
+                    <React.Fragment key={time}>
+                      <div className="text-xs font-mono text-zinc-500">{time}</div>
+                      {courtsList.map(court => {
+                        const slot = slotData.find(s => s.time === time && s.court === court.name);
+                        return (
+                          <div
+                            key={`${court.id}-${time}`}
+                            onClick={() => slot && setSelectedSlot(slot)}
+                            className={`h-24 rounded-lg border cursor-pointer flex items-center justify-center transition-all ${
+                              slot?.status === 'booked' ? 'bg-zinc-950 border-zinc-900 opacity-60' :
+                              slot?.status === 'partial' ? 'bg-zinc-900/40 border-zinc-800' :
+                              'bg-transparent border-zinc-800 hover:bg-zinc-900'
+                            }`}
+                          >
+                            {slot?.status === 'booked' && <Icon name="lock" className="w-5 h-5 text-zinc-600" />}
+                            {slot?.status === 'partial' && <span className="text-xs text-zinc-400">{slot.players}/4</span>}
+                            {slot?.status === 'open' && <Icon name="plus" className="w-4 h-4 text-zinc-600" />}
+                          </div>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
+                </div>
               </div>
             </div>
           )}
