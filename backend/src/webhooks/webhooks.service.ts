@@ -17,20 +17,23 @@ export class WebhooksService {
 
   /**
    * Handle incoming WhatsApp webhook from Ultramsg.com
-   * Expected payload structure (based on Ultramsg API):
+   * Expected payload structure (based on Ultramsg API documentation):
    * {
-   *   "instance": "instance_id",
-   *   "from": "966512345678",
-   *   "body": "YES",
-   *   "type": "chat"
-   * }
-   * Or alternative format:
-   * {
+   *   "event_type": "message_received",
+   *   "instanceId": "1150",
    *   "data": {
-   *     "from": "966512345678",
-   *     "body": "YES"
+   *     "id": "[email protected]_3EB0FF54790702367270",
+   *     "from": "[email protected]",
+   *     "to": "[email protected]",
+   *     "ack": "",
+   *     "type": "chat",
+   *     "body": "Hello, World!",
+   *     "fromMe": false,
+   *     "time": 1644957719
    *   }
    * }
+   * 
+   * Reference: https://blog.ultramsg.com/ar/استقبال-whatsapp-api-باستخدام-الويب-هوك-nodejs/
    */
   async handleWhatsAppWebhook(payload: any): Promise<{ success: boolean; message?: string }> {
     try {
@@ -47,19 +50,30 @@ export class WebhooksService {
         timestamp: new Date().toISOString(),
       });
 
-      // Extract phone number from various possible fields (Ultramsg format)
-      const from = payload?.from || 
-                    payload?.data?.from || 
-                    payload?.phone || 
-                    payload?.phone_number || 
-                    payload?.sender || 
-                    payload?.wa_id ||
-                    null;
+      // Extract phone number from Ultramsg payload structure
+      // Ultramsg sends: data.from which may be "[email protected]" or just the number
+      let from = payload?.data?.from || 
+                  payload?.from || 
+                  payload?.phone || 
+                  payload?.phone_number || 
+                  payload?.sender || 
+                  payload?.wa_id ||
+                  null;
       
-      // Extract message text from various possible fields (Ultramsg uses "body")
-      // Ultramsg typically sends: { from: "...", body: "...", type: "chat" }
-      let message = payload?.body || 
-                    payload?.data?.body ||
+      // Extract phone number from WhatsApp ID format (e.g., "[email protected]" -> "966512345678")
+      if (from && from.includes('@')) {
+        // Extract phone number from WhatsApp ID format: [email protected]
+        const phoneMatch = from.match(/^(\d+)@/);
+        if (phoneMatch) {
+          from = phoneMatch[1];
+          console.log('[Webhook] Extracted phone from WhatsApp ID:', { original: payload?.data?.from, extracted: from });
+        }
+      }
+      
+      // Extract message text from Ultramsg payload structure
+      // Ultramsg sends: data.body for the message content
+      let message = payload?.data?.body ||
+                    payload?.body || 
                     payload?.message || 
                     payload?.text || 
                     payload?.content || 
@@ -69,8 +83,29 @@ export class WebhooksService {
                     payload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.body ||
                     null;
 
-      // Extract instance ID if present (for verification)
-      const instanceId = payload?.instance || payload?.data?.instance || null;
+      // Extract instance ID and event type
+      const instanceId = payload?.instanceId || payload?.instance || payload?.data?.instance || null;
+      const eventType = payload?.event_type || null;
+      
+      console.log('[Webhook] Extracted data:', {
+        eventType,
+        instanceId,
+        from,
+        message,
+        fromMe: payload?.data?.fromMe,
+      });
+      
+      // Ignore messages sent by us (fromMe: true)
+      if (payload?.data?.fromMe === true) {
+        console.log('[Webhook] Ignoring message sent by us (fromMe: true)');
+        return { success: true, message: 'Message ignored (sent by us)' };
+      }
+      
+      // Only process message_received events
+      if (eventType && eventType !== 'message_received') {
+        console.log(`[Webhook] Ignoring event type: ${eventType}`);
+        return { success: true, message: `Event type ${eventType} ignored` };
+      }
       
       // Extract button/interactive data if present
       const { button_id, interactive } = payload;
