@@ -10,6 +10,51 @@ export class WhatsAppService {
   private apiToken: string;
   private apiBaseUrl: string; // Base URL with instance ID included (e.g., https://api.ultramsg.com/instance157813)
 
+  private normalizeUltraMsgBaseUrl(params: { apiUrl?: string; instanceId?: string }): string {
+    const rawApiUrl = (params.apiUrl || '').trim();
+    const rawInstanceId = (params.instanceId || '').trim();
+
+    const normalizeInstanceSegment = (seg: string) => {
+      const s = seg.trim().replace(/^\/+|\/+$/g, '');
+      if (!s) return '';
+      if (/^\d+$/.test(s)) return `instance${s}`;
+      if (s.startsWith('instance')) return s;
+      // If user provided something else, keep as-is; could be a named instance.
+      return s;
+    };
+
+    const fallbackBase = () => {
+      const instanceSeg = normalizeInstanceSegment(rawInstanceId);
+      return instanceSeg ? `https://api.ultramsg.com/${instanceSeg}` : 'https://api.ultramsg.com';
+    };
+
+    if (!rawApiUrl || rawApiUrl === 'https://api.ultramsg.com' || rawApiUrl === 'https://api.ultramsg.com/') {
+      return fallbackBase();
+    }
+
+    // Allow apiUrl to be provided as just "instanceXXXX" (or "157813")
+    if (!rawApiUrl.startsWith('http://') && !rawApiUrl.startsWith('https://')) {
+      const instanceSeg = normalizeInstanceSegment(rawApiUrl);
+      return instanceSeg ? `https://api.ultramsg.com/${instanceSeg}` : fallbackBase();
+    }
+
+    try {
+      const url = new URL(rawApiUrl);
+      const segments = url.pathname.split('/').filter(Boolean);
+      const instanceSeg = normalizeInstanceSegment(segments[0] || '');
+
+      // Strip any extra path like "/messages/chat" or "/instance/status" from misconfigured URLs.
+      url.pathname = instanceSeg ? `/${instanceSeg}` : '';
+      url.search = '';
+      url.hash = '';
+
+      // Remove trailing slash for consistency.
+      return url.toString().replace(/\/$/, '');
+    } catch {
+      return fallbackBase();
+    }
+  }
+
   constructor(
     private configService: ConfigService,
     private invitationsService: InvitationsService,
@@ -19,25 +64,19 @@ export class WhatsAppService {
   ) {
     // Ultramsg.com configuration
     this.apiToken = this.configService.get<string>('ULTRAMSG_TOKEN') || '';
-    
-    // Get base URL (should include instance ID, e.g., https://api.ultramsg.com/instance157813)
-    let apiUrl = this.configService.get<string>('ULTRAMSG_API_URL') || '';
-    
-    // Remove trailing slash if present for consistency
-    if (apiUrl.endsWith('/')) {
-      apiUrl = apiUrl.slice(0, -1);
-    }
-    
-    // If URL doesn't include instance, try to get it from instance ID
-    if (!apiUrl || apiUrl === 'https://api.ultramsg.com') {
-      const instanceId = this.configService.get<string>('ULTRAMSG_INSTANCE_ID') || '';
-      if (instanceId) {
-        this.apiBaseUrl = `https://api.ultramsg.com/${instanceId}`;
-      } else {
-        this.apiBaseUrl = 'https://api.ultramsg.com';
-      }
-    } else {
-      this.apiBaseUrl = apiUrl;
+
+    const configuredApiUrl = this.configService.get<string>('ULTRAMSG_API_URL') || '';
+    const configuredInstanceId = this.configService.get<string>('ULTRAMSG_INSTANCE_ID') || '';
+    this.apiBaseUrl = this.normalizeUltraMsgBaseUrl({
+      apiUrl: configuredApiUrl,
+      instanceId: configuredInstanceId,
+    });
+
+    if (configuredApiUrl && configuredApiUrl.trim() !== this.apiBaseUrl) {
+      console.log('[WhatsApp] Normalized ULTRAMSG_API_URL:', {
+        configured: configuredApiUrl.trim(),
+        normalized: this.apiBaseUrl,
+      });
     }
   }
 
@@ -98,8 +137,26 @@ export class WhatsAppService {
       });
 
       const responseText = await response.text();
+
+      // Some UltraMsg plans return HTTP 200 with an error JSON (e.g., {"error":"Path not found..."}).
+      // Only treat as success if response JSON indicates the message was sent.
       if (response.ok) {
-        return { ok: true as const, path, responseText };
+        try {
+          const parsed = JSON.parse(responseText);
+          const isError = !!(parsed?.error && String(parsed.error).trim() !== '');
+          const isSent =
+            parsed?.sent === true ||
+            parsed?.success === true ||
+            typeof parsed?.id === 'string' ||
+            typeof parsed?.messageId === 'string' ||
+            typeof parsed?.message_id === 'string';
+
+          if (!isError && isSent) {
+            return { ok: true as const, path, responseText };
+          }
+        } catch {
+          // Fall through to treat as failure; we'll try next candidate or fallback to chat.
+        }
       }
 
       lastError = { status: response.status, body: responseText, path };
