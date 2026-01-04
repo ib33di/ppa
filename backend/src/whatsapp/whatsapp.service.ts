@@ -28,6 +28,10 @@ export class WhatsAppService {
    */
   async getAccounts(): Promise<any> {
     try {
+      if (!this.apiToken || this.apiToken.trim() === '') {
+        throw new Error('AdWhats API token is not configured');
+      }
+
       const response = await fetch(`${this.apiUrl}/accounts`, {
         method: 'GET',
         headers: {
@@ -43,8 +47,54 @@ export class WhatsAppService {
       const result = await response.json();
       return result;
     } catch (error) {
-      console.error('Error fetching WhatsApp accounts:', error);
+      console.error('[WhatsApp] Error fetching WhatsApp accounts:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Verify API token and account permissions
+   */
+  async verifyAccount(): Promise<{ valid: boolean; error?: string; accounts?: any[] }> {
+    try {
+      const accountsResult = await this.getAccounts();
+      
+      if (accountsResult.status !== 'success') {
+        return { 
+          valid: false, 
+          error: accountsResult.message || 'Failed to verify account' 
+        };
+      }
+
+      const accounts = accountsResult.data?.records || [];
+      
+      // Check if the configured account ID exists
+      const accountExists = accounts.some((acc: any) => acc.id === this.whatsappAccountId);
+      
+      if (!accountExists) {
+        return { 
+          valid: false, 
+          error: `Account ID ${this.whatsappAccountId} not found. Available accounts: ${accounts.map((a: any) => a.id).join(', ')}`,
+          accounts 
+        };
+      }
+
+      // Check if account is ready
+      const account = accounts.find((acc: any) => acc.id === this.whatsappAccountId);
+      if (!account.ready) {
+        return { 
+          valid: false, 
+          error: `Account ID ${this.whatsappAccountId} is not ready. Please check your AdWhats dashboard.`,
+          accounts 
+        };
+      }
+
+      return { valid: true, accounts };
+    } catch (error: any) {
+      return { 
+        valid: false, 
+        error: error.message || 'Failed to verify account permissions' 
+      };
     }
   }
 
@@ -55,11 +105,18 @@ export class WhatsAppService {
     try {
       // Check if API token is configured
       if (!this.apiToken || this.apiToken.trim() === '') {
-        console.error('AdWhats API token is not configured');
+        console.error('[WhatsApp] API token is not configured');
         throw new Error('WhatsApp API token is not configured. Please set ADWHATS_API_TOKEN in environment variables.');
       }
 
       console.log(`[WhatsApp] Sending invitation for invitationId: ${invitationId}`);
+
+      // Verify account permissions before sending
+      const verification = await this.verifyAccount();
+      if (!verification.valid) {
+        console.error(`[WhatsApp] Account verification failed: ${verification.error}`);
+        throw new Error(`Account verification failed: ${verification.error}. Please check your AdWhats API token and account ID.`);
+      }
 
       // Get invitation with match and player details
       const invitation = await this.invitationsService.findOne(invitationId);
@@ -154,7 +211,14 @@ export class WhatsAppService {
       if (result.status !== 'success') {
         const errorMsg = result.message || result.error || 'Unknown error';
         console.error(`[WhatsApp] API returned error: ${errorMsg}`);
-        throw new Error(`AdWhats API returned error: ${errorMsg}`);
+        
+        // Provide helpful error messages for common issues
+        let helpfulError = errorMsg;
+        if (errorMsg.includes('permissions') || errorMsg.includes('permission')) {
+          helpfulError = `${errorMsg}. Please verify: 1) Your API token is valid and has send message permissions, 2) Account ID ${this.whatsappAccountId} exists and is active, 3) Your AdWhats account has the required permissions.`;
+        }
+        
+        throw new Error(`AdWhats API returned error: ${helpfulError}`);
       }
 
       console.log(`[WhatsApp] Message sent successfully to ${player.name}`);
