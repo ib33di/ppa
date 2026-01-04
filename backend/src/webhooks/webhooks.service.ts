@@ -136,10 +136,21 @@ export class WebhooksService {
 
       // Process incoming message (detects YES/NO)
       // Note: Ultramsg sends phone number without + prefix (e.g., "966512345678")
-      console.log('[Webhook] Calling processIncomingMessage...');
-      console.log('[Webhook] Parameters:', { from, message: messageText, originalMessage: message });
+      console.log('[Webhook] ========== CALLING processIncomingMessage ==========');
+      console.log('[Webhook] Parameters:', { 
+        from, 
+        message: messageText, 
+        originalMessage: message,
+        messageType: typeof messageText,
+        messageLength: messageText?.length || 0
+      });
+      
       const result = await this.whatsappService.processIncomingMessage(from, messageText);
-      console.log('[Webhook] processIncomingMessage result:', JSON.stringify(result, null, 2));
+      
+      console.log('[Webhook] ========== processIncomingMessage RESULT ==========');
+      console.log('[Webhook] Result:', JSON.stringify(result, null, 2));
+      console.log('[Webhook] Success:', result.success);
+      console.log('[Webhook] Action:', result.action);
 
       if (!result.success) {
         console.warn(`[Webhook] Processing failed: ${result.action}`);

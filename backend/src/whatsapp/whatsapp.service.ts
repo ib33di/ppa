@@ -353,6 +353,7 @@ export class WhatsAppService {
    */
   async processIncomingMessage(phone: string, message: string): Promise<{ success: boolean; action?: string }> {
     try {
+      console.log(`[WhatsApp] ========== PROCESSING INCOMING MESSAGE ==========`);
       console.log(`[WhatsApp] Processing incoming message:`, {
         phone,
         message,
@@ -386,36 +387,41 @@ export class WhatsAppService {
       console.log(`[WhatsApp] Core message: "${coreMessage}"`);
 
       // YES patterns (case-insensitive) - also check for button emoji
-      const yesKeywords = ['YES', 'Y', 'SI', 'OK', 'CONFIRM', 'ACCEPT', 'نعم', 'موافق', 'أوافق', 'موافقة', '✅'];
+      // Support lowercase "yes" as well
+      const yesKeywords = ['YES', 'Y', 'SI', 'OK', 'CONFIRM', 'ACCEPT', 'نعم', 'موافق', 'أوافق', 'موافقة', '✅', 'yes', 'y'];
       // NO patterns (case-insensitive) - also check for button emoji
-      const noKeywords = ['NO', 'N', 'DECLINE', 'REJECT', 'CANCEL', 'لا', 'رفض', 'غير موافق', '❌'];
+      const noKeywords = ['NO', 'N', 'DECLINE', 'REJECT', 'CANCEL', 'لا', 'رفض', 'غير موافق', '❌', 'no', 'n'];
 
       let isYes = false;
       let isNo = false;
 
-      // Check if message starts with or equals any YES keyword
+      // Check if message equals or contains any YES keyword (case-insensitive)
       for (const keyword of yesKeywords) {
-        if (coreMessage === keyword.toUpperCase() || 
-            coreMessage.startsWith(keyword.toUpperCase() + ' ') ||
+        const keywordUpper = keyword.toUpperCase();
+        if (coreMessage === keywordUpper || 
             coreMessage === keyword ||
+            coreMessage.startsWith(keywordUpper + ' ') ||
             coreMessage.startsWith(keyword + ' ') ||
-            coreMessage.includes(keyword.toUpperCase())) {
+            coreMessage.includes(keywordUpper) ||
+            coreMessage.includes(keyword)) {
           isYes = true;
-          console.log(`[WhatsApp] Matched YES keyword: "${keyword}"`);
+          console.log(`[WhatsApp] ✅ Matched YES keyword: "${keyword}" (coreMessage: "${coreMessage}")`);
           break;
         }
       }
 
-      // Check if message starts with or equals any NO keyword
+      // Check if message equals or contains any NO keyword (case-insensitive)
       if (!isYes) {
         for (const keyword of noKeywords) {
-          if (coreMessage === keyword.toUpperCase() || 
-              coreMessage.startsWith(keyword.toUpperCase() + ' ') ||
+          const keywordUpper = keyword.toUpperCase();
+          if (coreMessage === keywordUpper || 
               coreMessage === keyword ||
+              coreMessage.startsWith(keywordUpper + ' ') ||
               coreMessage.startsWith(keyword + ' ') ||
-              coreMessage.includes(keyword.toUpperCase())) {
+              coreMessage.includes(keywordUpper) ||
+              coreMessage.includes(keyword)) {
             isNo = true;
-            console.log(`[WhatsApp] Matched NO keyword: "${keyword}"`);
+            console.log(`[WhatsApp] ❌ Matched NO keyword: "${keyword}" (coreMessage: "${coreMessage}")`);
             break;
           }
         }
@@ -439,16 +445,34 @@ export class WhatsAppService {
         normalized: normalizedPhone,
       });
 
-      let player = await this.playersService.findByPhone(normalizedPhone);
+      // Try finding player with multiple phone formats
+      let player = await this.playersService.findByPhone(phone);
+      
+      if (!player) {
+        console.log(`[WhatsApp] Player not found with original phone, trying normalized...`);
+        player = await this.playersService.findByPhone(normalizedPhone);
+      }
       
       if (!player) {
         console.log(`[WhatsApp] Player not found with normalized phone, trying with + prefix...`);
-        // Try with + prefix
         player = await this.playersService.findByPhone(`+${normalizedPhone}`);
       }
 
       if (!player) {
-        console.error(`[WhatsApp] Player not found for phone: ${phone} (normalized: ${normalizedPhone})`);
+        console.error(`[WhatsApp] ❌ Player not found for phone: ${phone} (normalized: ${normalizedPhone})`);
+        console.error(`[WhatsApp] Tried formats:`, [phone, normalizedPhone, `+${normalizedPhone}`]);
+        
+        // Log all players for debugging
+        try {
+          const { data: allPlayers } = await this.supabase
+            .from('players')
+            .select('id, name, phone')
+            .limit(10);
+          console.error(`[WhatsApp] Sample players in database:`, allPlayers);
+        } catch (err) {
+          console.error(`[WhatsApp] Error fetching players for debugging:`, err);
+        }
+        
         return { success: false, action: 'player_not_found' };
       }
 
@@ -467,7 +491,9 @@ export class WhatsAppService {
   }
 
   private async processPlayerResponse(player: any, isYes: boolean): Promise<{ success: boolean; action?: string }> {
-    console.log(`[WhatsApp] Processing response for player ${player.name} (${player.phone}): ${isYes ? 'YES' : 'NO'}`);
+    console.log(`[WhatsApp] ========== PROCESSING PLAYER RESPONSE ==========`);
+    console.log(`[WhatsApp] Processing response for player ${player.name} (${player.phone}): ${isYes ? 'YES ✅' : 'NO ❌'}`);
+    console.log(`[WhatsApp] Player ID: ${player.id}`);
     
     // Find pending invitation for this player
     console.log(`[WhatsApp] Searching for pending/invited invitations for player ${player.id}...`);
@@ -481,56 +507,70 @@ export class WhatsAppService {
       .limit(1);
 
     if (invitationsError) {
-      console.error('[WhatsApp] Error fetching invitations:', invitationsError);
+      console.error('[WhatsApp] ❌ Error fetching invitations:', invitationsError);
       console.error('[WhatsApp] Error details:', JSON.stringify(invitationsError, null, 2));
       return { success: false, action: 'error' };
     }
 
     console.log(`[WhatsApp] Found ${invitations?.length || 0} pending/invited invitation(s) for player ${player.name}`);
+    if (invitations && invitations.length > 0) {
+      console.log(`[WhatsApp] Invitation details:`, {
+        id: invitations[0].id,
+        matchId: invitations[0].match_id,
+        status: invitations[0].status,
+        createdAt: invitations[0].created_at,
+      });
+    }
 
     if (!invitations || invitations.length === 0) {
       // Check if there are any invitations at all for this player
       const { data: allInvitations } = await this.supabase
         .from('invitations')
-        .select('id, status, created_at')
+        .select('id, status, created_at, match_id')
         .eq('player_id', player.id)
         .order('created_at', { ascending: false })
         .limit(5);
       
-      console.warn(`[WhatsApp] No pending invitation found for player ${player.name}`);
-      console.warn(`[WhatsApp] All invitations for this player:`, allInvitations);
+      console.warn(`[WhatsApp] ⚠️ No pending invitation found for player ${player.name}`);
+      console.warn(`[WhatsApp] All invitations for this player:`, JSON.stringify(allInvitations, null, 2));
       return { success: false, action: 'no_pending_invitation' };
     }
 
     const invitation = invitations[0];
     const newStatus = isYes ? 'confirmed' : 'declined';
 
+    console.log(`[WhatsApp] ========== UPDATING INVITATION ==========`);
     console.log(`[WhatsApp] Updating invitation ${invitation.id} to status: ${newStatus}`, {
       invitationId: invitation.id,
       matchId: invitation.match_id,
       currentStatus: invitation.status,
       newStatus,
+      isYes,
     });
 
     // Update invitation status with responded_at timestamp
     try {
-      const updateResult = await this.invitationsService.update(invitation.id, {
+      const updateData = {
         status: newStatus,
         responded_at: new Date().toISOString(),
-      });
+      };
       
-      console.log(`[WhatsApp] Successfully updated invitation ${invitation.id} to ${newStatus}`, {
-        updateResult,
-      });
+      console.log(`[WhatsApp] Update data:`, JSON.stringify(updateData, null, 2));
+      
+      const updateResult = await this.invitationsService.update(invitation.id, updateData);
+      
+      console.log(`[WhatsApp] ✅ Successfully updated invitation ${invitation.id} to ${newStatus}`);
+      console.log(`[WhatsApp] Update result:`, JSON.stringify(updateResult, null, 2));
       
       // Update match confirmed count
       console.log(`[WhatsApp] Updating confirmed count for match ${invitation.match_id}...`);
       await this.matchesService.updateConfirmedCount(invitation.match_id);
-      console.log(`[WhatsApp] Updated confirmed count for match ${invitation.match_id}`);
+      console.log(`[WhatsApp] ✅ Updated confirmed count for match ${invitation.match_id}`);
       
+      console.log(`[WhatsApp] ========== RESPONSE PROCESSED SUCCESSFULLY ==========`);
       return { success: true, action: newStatus };
     } catch (error) {
-      console.error('[WhatsApp] Error updating invitation:', error);
+      console.error('[WhatsApp] ❌ Error updating invitation:', error);
       console.error('[WhatsApp] Error stack:', error.stack);
       console.error('[WhatsApp] Error details:', JSON.stringify(error, null, 2));
       return { success: false, action: 'error' };

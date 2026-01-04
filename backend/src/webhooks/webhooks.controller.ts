@@ -73,7 +73,32 @@ export class WebhooksController {
     const result = await this.webhooksService.handleWhatsAppWebhook(payload);
     console.log('[Webhook] Processing result:', JSON.stringify(result, null, 2));
     console.log('[Webhook] ========== WEBHOOK PROCESSED ==========');
+    
+    // Return 200 OK even if processing failed (to prevent webhook retries)
+    // The result object contains the actual success status
     return result;
+  }
+
+  @Post('whatsapp/test')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  async testWebhook(@Body() testPayload: { from?: string; body?: string; message?: string }) {
+    // Test endpoint to simulate webhook calls
+    console.log('[Webhook] ========== TEST WEBHOOK CALLED ==========');
+    console.log('[Webhook] Test payload:', JSON.stringify(testPayload, null, 2));
+    
+    const payload = {
+      from: testPayload.from || '966512345678',
+      body: testPayload.body || testPayload.message || 'YES',
+      type: 'chat',
+    };
+    
+    const result = await this.webhooksService.handleWhatsAppWebhook(payload);
+    return {
+      success: true,
+      message: 'Test webhook processed',
+      result,
+    };
   }
 }
 
