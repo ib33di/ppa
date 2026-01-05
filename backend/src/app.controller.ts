@@ -12,5 +12,15 @@ export class AppController {
       timestamp: new Date().toISOString(),
     };
   }
+
+  @Get('health')
+  @Public()
+  health() {
+    // Lightweight health check for load balancers / uptime monitors.
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+    };
+  }
 }
 

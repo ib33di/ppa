@@ -1,13 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Player } from '../types';
 
 export function usePlayers() {
   const [players, setPlayers] = useState<Player[]>([]);
+  // "loading" here represents initial load only to prevent UI flicker.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const hasLoadedRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const inFlightRef = useRef(false);
+  const pendingRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const debounceTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    isMountedRef.current = true;
     // Wait for Supabase session before fetching
     const initializeAndFetch = async () => {
       try {
@@ -39,7 +47,7 @@ export function usePlayers() {
               table: 'players',
             },
             () => {
-              fetchPlayers();
+              scheduleFetch();
             }
           )
           .subscribe();
@@ -61,15 +69,36 @@ export function usePlayers() {
     });
 
     return () => {
+      isMountedRef.current = false;
+      if (debounceTimerRef.current) {
+        window.clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
       if (subscriptionCleanup) {
         subscriptionCleanup();
       }
     };
   }, []);
 
+  const scheduleFetch = () => {
+    if (debounceTimerRef.current) {
+      window.clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = window.setTimeout(() => {
+      debounceTimerRef.current = null;
+      fetchPlayers();
+    }, 200);
+  };
+
   const fetchPlayers = async () => {
+    if (inFlightRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    inFlightRef.current = true;
+    const requestId = ++requestIdRef.current;
     try {
-      setLoading(true);
+      if (!hasLoadedRef.current) setLoading(true);
       setError(null);
       const { data, error } = await supabase
         .from('players')
@@ -80,12 +109,20 @@ export function usePlayers() {
         console.error('Supabase error fetching players:', error);
         throw error;
       }
-      setPlayers(data as Player[]);
+      if (isMountedRef.current && requestId === requestIdRef.current) {
+        setPlayers(data as Player[]);
+        hasLoadedRef.current = true;
+      }
     } catch (err) {
       console.error('Error fetching players:', err);
-      setError(err as Error);
+      if (isMountedRef.current) setError(err as Error);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && !hasLoadedRef.current) setLoading(false);
+      inFlightRef.current = false;
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        fetchPlayers();
+      }
     }
   };
 

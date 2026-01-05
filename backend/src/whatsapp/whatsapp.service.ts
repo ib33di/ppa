@@ -9,6 +9,18 @@ import { SupabaseService } from '../supabase/supabase.service';
 export class WhatsAppService {
   private apiToken: string;
   private apiBaseUrl: string; // Base URL with instance ID included (e.g., https://api.ultramsg.com/instance157813)
+  private lastVerifyAt = 0;
+  private lastVerifyResult: { valid: boolean; error?: string } | null = null;
+
+  private async fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 10_000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(id);
+    }
+  }
 
   private normalizeUltraMsgBaseUrl(params: { apiUrl?: string; instanceId?: string }): string {
     const rawApiUrl = (params.apiUrl || '').trim();
@@ -100,10 +112,10 @@ export class WhatsAppService {
       body,
     });
 
-    const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
+    const response = await this.fetchWithTimeout(`${apiEndpoint}?${params.toString()}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-    });
+    }, 15_000);
     const responseText = await response.text();
     return { response, responseText };
   }
@@ -130,10 +142,10 @@ export class WhatsAppService {
         buttons: buttonsJson,
       });
 
-      const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
+      const response = await this.fetchWithTimeout(`${apiEndpoint}?${params.toString()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-      });
+      }, 15_000);
 
       const responseText = await response.text();
 
@@ -167,33 +179,49 @@ export class WhatsAppService {
   /**
    * Verify Ultramsg instance status
    */
-  async verifyAccount(): Promise<{ valid: boolean; error?: string }> {
+  async verifyAccount(opts?: { force?: boolean; cacheMs?: number }): Promise<{ valid: boolean; error?: string }> {
     try {
+      const cacheMs = typeof opts?.cacheMs === 'number' ? opts.cacheMs : 30_000;
+      const force = opts?.force === true;
+      const now = Date.now();
+      if (!force && this.lastVerifyResult && now - this.lastVerifyAt < cacheMs) {
+        return this.lastVerifyResult;
+      }
+
       if (!this.apiToken || this.apiToken.trim() === '') {
-        return { 
+        const res = {
           valid: false, 
           error: 'Ultramsg token is not configured. Please set ULTRAMSG_TOKEN in environment variables.' 
         };
+        this.lastVerifyAt = now;
+        this.lastVerifyResult = res;
+        return res;
       }
 
       if (!this.apiBaseUrl || this.apiBaseUrl === 'https://api.ultramsg.com') {
-        return { 
+        const res = {
           valid: false, 
           error: 'Ultramsg API URL is not configured. Please set ULTRAMSG_API_URL with instance ID (e.g., https://api.ultramsg.com/instance157813).' 
         };
+        this.lastVerifyAt = now;
+        this.lastVerifyResult = res;
+        return res;
       }
 
       // Check instance status via Ultramsg API
-      const response = await fetch(`${this.apiBaseUrl}/instance/status?token=${this.apiToken}`, {
+      const response = await this.fetchWithTimeout(`${this.apiBaseUrl}/instance/status?token=${this.apiToken}`, {
         method: 'GET',
-      });
+      }, 10_000);
 
       if (!response.ok) {
         const error = await response.text();
-        return { 
+        const res = {
           valid: false, 
           error: `Ultramsg API error: ${error}` 
         };
+        this.lastVerifyAt = now;
+        this.lastVerifyResult = res;
+        return res;
       }
 
       const result = await response.json();
@@ -215,18 +243,27 @@ export class WhatsAppService {
       
       if (isConnected) {
         console.log('[WhatsApp] Instance is connected and ready');
-        return { valid: true };
+        const res = { valid: true };
+        this.lastVerifyAt = now;
+        this.lastVerifyResult = res;
+        return res;
       }
 
-      return { 
+      const res = {
         valid: false, 
         error: `Instance is not connected. Status: ${JSON.stringify(result)}` 
       };
+      this.lastVerifyAt = now;
+      this.lastVerifyResult = res;
+      return res;
     } catch (error: any) {
-      return { 
+      const res = {
         valid: false, 
         error: error.message || 'Failed to verify Ultramsg instance' 
       };
+      this.lastVerifyAt = Date.now();
+      this.lastVerifyResult = res;
+      return res;
     }
   }
 
@@ -388,9 +425,9 @@ export class WhatsAppService {
       });
 
       try {
-        const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
+        const response = await this.fetchWithTimeout(`${apiEndpoint}?${params.toString()}`, {
           method: 'POST',
-        });
+        }, 10_000);
 
         if (response.ok) {
           const result = await response.json();
@@ -436,12 +473,12 @@ export class WhatsAppService {
         body: message,
       });
 
-      const response = await fetch(`${apiEndpoint}?${params.toString()}`, {
+      const response = await this.fetchWithTimeout(`${apiEndpoint}?${params.toString()}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-      });
+      }, 15_000);
 
       if (!response.ok) {
         const error = await response.text();

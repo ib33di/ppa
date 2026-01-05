@@ -38,12 +38,22 @@ export class InvitationsController {
   @Roles('admin', 'manager')
   async send(@Body() body: { match_id: string; player_ids: string[] }) {
     const invitations = await this.invitationsService.ensureInvitations(body.match_id, body.player_ids);
-    const results: Array<{ invitationId: string; success: boolean; error?: string }> = [];
-
-    for (const inv of invitations) {
-      const r = await this.whatsappService.sendInvitation(inv.id);
-      results.push({ invitationId: inv.id, success: r.success, error: r.error });
-    }
+    const results: Array<{ invitationId: string; success: boolean; error?: string }> = new Array(invitations.length);
+    const concurrency = 3; // small limit to avoid provider rate-limits
+    let idx = 0;
+    const worker = async () => {
+      while (idx < invitations.length) {
+        const myIndex = idx++;
+        const current = invitations[myIndex];
+        try {
+          const r = await this.whatsappService.sendInvitation(current.id);
+          results[myIndex] = { invitationId: current.id, success: r.success, error: r.error };
+        } catch (e: any) {
+          results[myIndex] = { invitationId: current.id, success: false, error: e?.message || 'Failed to send invitation' };
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, invitations.length) }, () => worker()));
 
     return { match_id: body.match_id, results };
   }

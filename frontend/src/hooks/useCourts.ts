@@ -1,14 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Court } from '../types';
 import { api } from '../lib/api';
 
 export function useCourts() {
   const [courts, setCourts] = useState<Court[]>([]);
+  // "loading" here represents initial load only to prevent UI flicker.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const hasLoadedRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const inFlightRef = useRef(false);
+  const pendingRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const debounceTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    isMountedRef.current = true;
     const initializeAndFetch = async () => {
       try {
         await fetchCourts();
@@ -19,7 +27,7 @@ export function useCourts() {
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'courts' },
-            () => fetchCourts()
+            () => scheduleFetch()
           )
           .subscribe();
 
@@ -28,7 +36,7 @@ export function useCourts() {
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'court_availability' },
-            () => fetchCourts()
+            () => scheduleFetch()
           )
           .subscribe();
 
@@ -50,35 +58,78 @@ export function useCourts() {
     });
 
     return () => {
+      isMountedRef.current = false;
+      if (debounceTimerRef.current) {
+        window.clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
       if (subscriptionCleanup) subscriptionCleanup();
     };
   }, []);
 
+  const scheduleFetch = () => {
+    if (debounceTimerRef.current) {
+      window.clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = window.setTimeout(() => {
+      debounceTimerRef.current = null;
+      fetchCourts();
+    }, 200);
+  };
+
   const fetchCourts = async () => {
+    if (inFlightRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    inFlightRef.current = true;
+    const requestId = ++requestIdRef.current;
     try {
-      setLoading(true);
+      if (!hasLoadedRef.current) setLoading(true);
       setError(null);
       const data = await api.get<Court[]>('/courts');
-      setCourts(data);
+      if (isMountedRef.current && requestId === requestIdRef.current) {
+        setCourts(data);
+        hasLoadedRef.current = true;
+      }
     } catch (err) {
       console.error('Error fetching courts:', err);
-      setError(err as Error);
+      if (isMountedRef.current) setError(err as Error);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && !hasLoadedRef.current) setLoading(false);
+      inFlightRef.current = false;
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        fetchCourts();
+      }
     }
   };
 
   const fetchAllCourts = async () => {
+    if (inFlightRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    inFlightRef.current = true;
+    const requestId = ++requestIdRef.current;
     try {
-      setLoading(true);
+      if (!hasLoadedRef.current) setLoading(true);
       setError(null);
       const data = await api.get<Court[]>('/courts?all=true');
-      setCourts(data);
+      if (isMountedRef.current && requestId === requestIdRef.current) {
+        setCourts(data);
+        hasLoadedRef.current = true;
+      }
     } catch (err) {
       console.error('Error fetching all courts:', err);
-      setError(err as Error);
+      if (isMountedRef.current) setError(err as Error);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && !hasLoadedRef.current) setLoading(false);
+      inFlightRef.current = false;
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        fetchCourts();
+      }
     }
   };
 
