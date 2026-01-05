@@ -56,7 +56,6 @@ const LiveMatchRow: React.FC<{ match: Match; isExpanded: boolean; onToggle: () =
   const invitations = match.invitations || [];
   const confirmedCount = invitations.filter(inv => inv.status === 'confirmed').length;
   const pendingCount = invitations.filter(inv => inv.status === 'pending' || inv.status === 'invited').length;
-  const declinedCount = invitations.filter(inv => inv.status === 'declined').length;
 
   return (
     <div 

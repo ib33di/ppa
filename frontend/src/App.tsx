@@ -283,7 +283,7 @@ function AppContent() {
                 courts={courtsList}
                 times={times}
                 selectedSlot={selectedCourtSlot}
-                onSlotClick={(courtId, time, match) => {
+                onSlotClick={(courtId, time) => {
                   setSelectedCourtSlot({ courtId, time });
                 }}
               />

@@ -180,8 +180,6 @@ export const CourtDetailsPanel: React.FC<CourtDetailsPanelProps> = ({
 
   const invitations = match.invitations || [];
   const confirmedInvitations = invitations.filter(inv => inv.status === 'confirmed');
-  const pendingInvitations = invitations.filter(inv => inv.status === 'pending' || inv.status === 'invited');
-  const declinedInvitations = invitations.filter(inv => inv.status === 'declined');
 
   const formatTime = (dateStr?: string) => {
     if (!dateStr) return '--:--';
