@@ -548,7 +548,10 @@ export class WhatsAppService {
   /**
    * Process incoming WhatsApp message (YES/NO detection).
    */
-  async processIncomingMessage(phone: string, message: string): Promise<{ success: boolean; action?: string }> {
+  async processIncomingMessage(
+    phone: string,
+    message: string,
+  ): Promise<{ success: boolean; action?: string; invitationId?: string }> {
     try {
       console.log(`[WhatsApp] ========== PROCESSING INCOMING MESSAGE ==========`);
       console.log(`[WhatsApp] Processing incoming message:`, {
@@ -642,7 +645,10 @@ export class WhatsAppService {
     }
   }
 
-  private async processPlayerResponse(player: any, isYes: boolean): Promise<{ success: boolean; action?: string }> {
+  private async processPlayerResponse(
+    player: any,
+    isYes: boolean,
+  ): Promise<{ success: boolean; action?: string; invitationId?: string }> {
     console.log(`[WhatsApp] ========== PROCESSING PLAYER RESPONSE ==========`);
     console.log(`[WhatsApp] Processing response for player ${player.name} (${player.phone}): ${isYes ? 'YES ✅' : 'NO ❌'}`);
     console.log(`[WhatsApp] Player ID: ${player.id}`);
@@ -720,7 +726,7 @@ export class WhatsAppService {
       console.log(`[WhatsApp] ✅ Updated confirmed count for match ${invitation.match_id}`);
       
       console.log(`[WhatsApp] ========== RESPONSE PROCESSED SUCCESSFULLY ==========`);
-      return { success: true, action: newStatus };
+      return { success: true, action: newStatus, invitationId: invitation.id };
     } catch (error) {
       console.error('[WhatsApp] ❌ Error updating invitation:', error);
       console.error('[WhatsApp] Error stack:', error.stack);
