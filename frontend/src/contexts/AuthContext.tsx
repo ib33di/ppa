@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { onUnauthorized } from '../lib/authEvents';
 
 interface UserWithRole {
   id: string;
@@ -25,6 +26,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserWithRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
+
+  const clearAuthState = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('access_token');
+  };
 
   useEffect(() => {
     // Function to load user profile with role
@@ -270,14 +282,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('access_token');
+    await clearAuthState();
   };
 
   const isAdmin = user?.role === 'admin';
   const isManager = user?.role === 'manager' || isAdmin;
+
+  useEffect(() => {
+    // Ensure 401s never hard-navigate / reload the page.
+    return onUnauthorized(() => {
+      clearAuthState();
+    });
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, token, isAdmin, isManager }}>

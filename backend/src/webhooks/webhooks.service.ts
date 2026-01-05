@@ -15,6 +15,10 @@ export class WebhooksService {
     private supabase: SupabaseService,
   ) {}
 
+  private isDebugEnabled() {
+    return String(process.env.WEBHOOK_DEBUG || '').toLowerCase() === 'true';
+  }
+
   private safeStringify(input: any) {
     const seen = new WeakSet();
     const redactNeedles = ['token', 'authorization', 'api_key', 'apikey', 'password', 'secret', 'webhook-token', 'webhook_token'];
@@ -85,18 +89,17 @@ export class WebhooksService {
    */
   async handleWhatsAppWebhook(payload: any): Promise<{ success: boolean; message?: string }> {
     try {
-      console.log('[Webhook] ========== INCOMING WEBHOOK ==========');
-      console.log('[Webhook] Full payload (redacted):', this.safeStringify(payload));
-      console.log('[Webhook] Payload keys:', Object.keys(payload || {}));
-      console.log('[Webhook] Processing WhatsApp message:', {
-        from: payload?.from,
-        message: payload?.message,
-        text: payload?.text,
-        body: payload?.body,
-        content: payload?.content,
-        accountId: payload?.whatsapp_account_id,
-        timestamp: new Date().toISOString(),
+      const debug = this.isDebugEnabled();
+      const startedAt = new Date();
+
+      console.log('[Webhook] Processing WhatsApp webhook (async)', {
+        payloadKeys: Object.keys(payload || {}),
+        timestamp: startedAt.toISOString(),
       });
+
+      if (debug) {
+        console.log('[Webhook] Full payload (redacted):', this.safeStringify(payload));
+      }
 
       // Extract phone number from Ultramsg payload structure
       // Ultramsg sends: data.from which may be "[email protected]" or just the number
@@ -216,7 +219,7 @@ export class WebhooksService {
 
       if (!result.success) {
         console.warn(`[Webhook] Processing failed: ${result.action}`);
-        console.warn(`[Webhook] Full result:`, result);
+        if (debug) console.warn(`[Webhook] Full result:`, result);
         return { success: false, message: `Processing failed: ${result.action}` };
       }
 
@@ -275,8 +278,8 @@ export class WebhooksService {
 
       return { success: true, message: `Message processed: ${result.action}` };
     } catch (error) {
-      console.error('Webhook processing error:', error);
-      return { success: false, message: error.message };
+      console.error('[Webhook] Processing error:', error);
+      return { success: false, message: (error as any)?.message || 'Webhook processing error' };
     }
   }
 }

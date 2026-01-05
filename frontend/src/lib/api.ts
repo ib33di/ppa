@@ -1,3 +1,5 @@
+import { emitUnauthorized } from './authEvents';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
 // Get auth token from localStorage
@@ -43,7 +45,7 @@ export const api = {
     
     if (response.status === 401) {
       localStorage.removeItem('access_token');
-      window.location.href = '/';
+      emitUnauthorized();
       throw new Error('Unauthorized');
     }
     
@@ -71,7 +73,7 @@ export const api = {
     
     if (response.status === 401) {
       localStorage.removeItem('access_token');
-      window.location.href = '/';
+      emitUnauthorized();
       throw new Error('Unauthorized');
     }
     
@@ -99,7 +101,7 @@ export const api = {
     
     if (response.status === 401) {
       localStorage.removeItem('access_token');
-      window.location.href = '/';
+      emitUnauthorized();
       throw new Error('Unauthorized');
     }
     
@@ -124,7 +126,7 @@ export const api = {
     
     if (response.status === 401) {
       localStorage.removeItem('access_token');
-      window.location.href = '/';
+      emitUnauthorized();
       throw new Error('Unauthorized');
     }
     
