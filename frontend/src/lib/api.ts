@@ -2,10 +2,22 @@ import { emitUnauthorized } from './authEvents';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
+const DEFAULT_TIMEOUT_MS = 15000;
+
 // Get auth token from localStorage
 const getAuthToken = (): string | null => {
   return localStorage.getItem('access_token');
 };
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 export const api = {
   async parseError(response: Response): Promise<Error> {
@@ -38,7 +50,7 @@ export const api = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
       method: 'GET',
       headers,
     });
@@ -65,7 +77,7 @@ export const api = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(data),
@@ -93,7 +105,7 @@ export const api = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify(data),
@@ -119,7 +131,7 @@ export const api = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, {
       method: 'DELETE',
       headers,
     });
