@@ -22,6 +22,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const DEFAULT_TIMEOUT_MS = 15000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserWithRole | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // First try to get role from backend
         const storedToken = localStorage.getItem('access_token');
         if (storedToken) {
-          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/profile`, {
+          const response = await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/auth/profile`, {
             headers: {
               'Authorization': `Bearer ${storedToken}`,
             },
@@ -103,77 +115,110 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Check for stored token
-    const storedToken = localStorage.getItem('access_token');
-    if (storedToken) {
-      setToken(storedToken);
-      
-      // Get session from Supabase first to get userId
-      supabase.auth.getSession().then(async ({ data: { session } }) => {
-        if (session?.user) {
-          const userWithRole = await loadUserProfile(session.user.id, session.user.email || '');
-          setUser(userWithRole);
+    let isMounted = true;
+
+    const initialize = async () => {
+      setLoading(true);
+      const storedToken = localStorage.getItem('access_token');
+      if (storedToken) setToken(storedToken);
+
+      try {
+        // Try Supabase session first (fast path)
+        let sessionUser: { id: string; email?: string } | null = null;
+        try {
+          const { data } = await supabase.auth.getSession();
+          if (data.session?.user) {
+            sessionUser = { id: data.session.user.id, email: data.session.user.email || '' };
+          }
+        } catch (err) {
+          console.warn('Supabase getSession failed:', err);
+        }
+
+        if (sessionUser) {
+          // Unblock UI immediately; role can be resolved async.
+          if (!isMounted) return;
+          setUser({ id: sessionUser.id, email: sessionUser.email || '', role: 'user' });
           setLoading(false);
-        } else {
-          // No Supabase session, try backend only
-          fetch(`${import.meta.env.VITE_API_BASE_URL}/auth/profile`, {
-            headers: {
-              'Authorization': `Bearer ${storedToken}`,
-            },
-          })
-            .then(res => {
-              if (res.ok) {
-                return res.json();
-              }
-              throw new Error('Invalid token');
-            })
-            .then(async userData => {
-              let userRole = userData.role || 'user';
-              if (userRole === 'authenticated') {
-                userRole = 'user';
-              }
-              console.log('User profile loaded (backend only):', { email: userData.email, role: userRole, rawRole: userData.role });
-              
-              // Try to get updated role from Supabase if we have userId
-              if (userData.id) {
-                const userWithRole = await loadUserProfile(userData.id, userData.email || '');
-                setUser(userWithRole);
-              } else {
-                setUser({
-                  id: userData.id,
-                  email: userData.email,
-                  role: userRole,
-                } as UserWithRole);
-              }
-              setLoading(false);
+
+          loadUserProfile(sessionUser.id, sessionUser.email || '')
+            .then((u) => {
+              if (isMounted) setUser(u);
             })
             .catch(() => {
-              localStorage.removeItem('access_token');
-              setToken(null);
-              setUser(null);
-              setLoading(false);
+              // ignore; we already set a safe default
             });
+          return;
         }
-      });
-    } else {
-      setLoading(false);
-    }
+
+        // No Supabase session; use backend token if present
+        if (storedToken) {
+          try {
+            const res = await fetchWithTimeout(`${import.meta.env.VITE_API_BASE_URL}/auth/profile`, {
+              headers: { 'Authorization': `Bearer ${storedToken}` },
+            });
+
+            if (!res.ok) throw new Error('Invalid token');
+            const userData = await res.json();
+            let userRole = userData.role || 'user';
+            if (userRole === 'authenticated') userRole = 'user';
+
+            if (!isMounted) return;
+            setUser({
+              id: userData.id,
+              email: userData.email,
+              role: userRole,
+            } as UserWithRole);
+          } catch (err) {
+            console.warn('Backend profile failed, clearing auth:', err);
+            localStorage.removeItem('access_token');
+            if (!isMounted) return;
+            setToken(null);
+            setUser(null);
+          } finally {
+            if (isMounted) setLoading(false);
+          }
+          return;
+        }
+
+        // No token at all
+        if (isMounted) {
+          setUser(null);
+          setToken(null);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err);
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    initialize();
 
     // Listen to Supabase auth changes and update role
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        const userWithRole = await loadUserProfile(session.user.id, session.user.email || '');
-        setUser(userWithRole);
+        // Unblock quickly, then resolve role async to avoid indefinite "loading"
+        setUser({ id: session.user.id, email: session.user.email || '', role: 'user' });
+        setLoading(false);
+        loadUserProfile(session.user.id, session.user.email || '')
+          .then((u) => setUser(u))
+          .catch(() => {
+            // ignore
+          });
       } else {
         setUser(null);
         setToken(null);
         localStorage.removeItem('access_token');
+        setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
