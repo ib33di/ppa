@@ -84,6 +84,7 @@ export function useCourts() {
     }
     inFlightRef.current = true;
     const requestId = ++requestIdRef.current;
+    const isInitialLoad = !hasLoadedRef.current;
     try {
       if (!hasLoadedRef.current) setLoading(true);
       setError(null);
@@ -91,12 +92,14 @@ export function useCourts() {
       if (isMountedRef.current && requestId === requestIdRef.current) {
         setCourts(data);
         hasLoadedRef.current = true;
+        if (isInitialLoad) setLoading(false);
       }
     } catch (err) {
       console.error('Error fetching courts:', err);
       if (isMountedRef.current) setError(err as Error);
     } finally {
-      if (isMountedRef.current && !hasLoadedRef.current) setLoading(false);
+      // Ensure the initial "Loading..." screen always unblocks after first attempt.
+      if (isMountedRef.current && isInitialLoad) setLoading(false);
       inFlightRef.current = false;
       if (pendingRef.current) {
         pendingRef.current = false;
@@ -112,6 +115,7 @@ export function useCourts() {
     }
     inFlightRef.current = true;
     const requestId = ++requestIdRef.current;
+    const isInitialLoad = !hasLoadedRef.current;
     try {
       if (!hasLoadedRef.current) setLoading(true);
       setError(null);
@@ -119,12 +123,14 @@ export function useCourts() {
       if (isMountedRef.current && requestId === requestIdRef.current) {
         setCourts(data);
         hasLoadedRef.current = true;
+        if (isInitialLoad) setLoading(false);
       }
     } catch (err) {
       console.error('Error fetching all courts:', err);
       if (isMountedRef.current) setError(err as Error);
     } finally {
-      if (isMountedRef.current && !hasLoadedRef.current) setLoading(false);
+      // Ensure the initial "Loading..." screen always unblocks after first attempt.
+      if (isMountedRef.current && isInitialLoad) setLoading(false);
       inFlightRef.current = false;
       if (pendingRef.current) {
         pendingRef.current = false;

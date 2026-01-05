@@ -1,6 +1,6 @@
 import React from 'react';
 import { Icon } from './Icons';
-import { Match, Invitation } from '../types';
+import { Match } from '../types';
 
 interface OperatorFocusPanelProps {
   matches: Match[];
